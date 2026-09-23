@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+
+set -uo pipefail
+
+ROOT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+
+# shellcheck source=../lib/dependencies.sh
+source "$ROOT_DIR/lib/dependencies.sh"
+# shellcheck source=../lib/request.sh
+source "$ROOT_DIR/lib/request.sh"
+# shellcheck source=../lib/response.sh
+source "$ROOT_DIR/lib/response.sh"
+# shellcheck source=../lib/errors.sh
+source "$ROOT_DIR/lib/errors.sh"
+# shellcheck source=../handlers/health.sh
+source "$ROOT_DIR/handlers/health.sh"
+# shellcheck source=../lib/server.sh
+source "$ROOT_DIR/lib/server.sh"
+
+print_help() {
+	cat <<'EOF'
+Usage:
+  bash-http help
+  bash-http serve [--host HOST] [--port PORT]
+
+Commands:
+  help      Show this help.
+  serve     Start the HTTP server.
+  routes    Reserved for Phase 2.
+  validate  Reserved for Phase 2.
+
+Serve defaults:
+  host: 127.0.0.1
+  port: 8080
+EOF
+}
+
+serve_command() {
+	local host='127.0.0.1'
+	local port='8080'
+
+	while (($# > 0)); do
+		case $1 in
+		--host | --port)
+			if (($# < 2)); then
+				printf 'Missing value for %s.\n' "$1" >&2
+				return 2
+			fi
+			if [[ $1 == '--host' ]]; then
+				host=$2
+			else
+				port=$2
+			fi
+			shift 2
+			;;
+		*)
+			printf 'Unknown serve option: %s.\n' "$1" >&2
+			return 2
+			;;
+		esac
+	done
+
+	validate_host "$host" || return 2
+	validate_port "$port" || return 2
+	require_command socat || return 1
+	start_server "$host" "$port" "$ROOT_DIR/bin/bash-http"
+}
+
+main() {
+	local command=${1:-help}
+	if (($# > 0)); then
+		shift
+	fi
+
+	check_bash_version || return 1
+	case $command in
+	help | --help | -h)
+		if (($# > 0)); then
+			printf 'The help command does not accept arguments.\n' >&2
+			return 2
+		fi
+		print_help
+		;;
+	serve) serve_command "$@" ;;
+	routes | validate)
+		printf '%s is not available until Phase 2.\n' "$command" >&2
+		return 1
+		;;
+	__handle-connection)
+		if (($# > 0)); then
+			printf 'The private connection operation does not accept arguments.\n' >&2
+			return 2
+		fi
+		handle_connection
+		;;
+	*)
+		printf 'Unknown command: %s.\n' "$command" >&2
+		print_help >&2
+		return 2
+		;;
+	esac
+}
+
+main "$@"

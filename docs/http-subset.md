@@ -130,6 +130,16 @@ Requirements:
 - error bodies have a stable JSON shape and a suitable JSON content type;
 - a no-content response, when introduced, has an empty body and length zero.
 
+Phase 1 error bodies use the HTTP reason phrase in this exact shape, without a
+trailing newline:
+
+```json
+{"error":"Bad Request"}
+```
+
+The value changes with the status, for example `Not Found`, `Method Not
+Allowed`, `Internal Server Error`, or `Not Implemented`.
+
 The initial central status table includes:
 
 | Code | Reason phrase | Initial use |
