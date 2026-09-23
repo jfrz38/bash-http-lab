@@ -31,7 +31,7 @@ WORKDIR /workspace
 
 FROM runtime-base AS runtime
 
-COPY --chown=sandbox:sandbox bin/ bin/
+COPY --chown=sandbox:sandbox --chmod=0555 bin/bash-http bin/bash-http
 COPY --chown=sandbox:sandbox handlers/ handlers/
 COPY --chown=sandbox:sandbox lib/ lib/
 COPY --chown=sandbox:sandbox openapi.yaml ./
