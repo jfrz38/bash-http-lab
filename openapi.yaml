@@ -1,0 +1,51 @@
+openapi: 3.0.3
+info:
+  title: Bash HTTP Lab Catalog
+  version: 0.1.0
+paths:
+  /health:
+    get:
+      operationId: health
+      responses:
+        '200':
+          description: Runtime health
+  /books:
+    get:
+      operationId: list_books
+      responses:
+        '200':
+          description: Books in the example catalog
+  /books/{bookId}:
+    get:
+      operationId: get_book
+      parameters:
+        - name: bookId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: One book
+        '404':
+          description: Book not found
+  /authors:
+    get:
+      operationId: list_authors
+      responses:
+        '200':
+          description: Authors in the example catalog
+  /authors/{authorId}:
+    get:
+      operationId: get_author
+      parameters:
+        - name: authorId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: One author
+        '404':
+          description: Author not found

@@ -6,6 +6,7 @@ SHELL := bash
 BASH_FILES := bin/bash-http $(wildcard lib/*.sh) $(wildcard handlers/*.sh) $(wildcard tests/*.sh) $(wildcard tests/unit/*.sh) $(wildcard tests/integration/*.sh)
 HOST ?= 127.0.0.1
 PORT ?= 8080
+OPENAPI_FILE ?= openapi.yaml
 
 .PHONY: help
 help: ## List public targets
@@ -31,7 +32,7 @@ format-check: ## Verify Bash formatting
 	@shfmt -d $(BASH_FILES)
 
 .PHONY: run check
-run: ## Start the local server (HOST=127.0.0.1 PORT=8080)
-	@./bin/bash-http serve --host "$(HOST)" --port "$(PORT)"
+run: ## Start the local server (OPENAPI_FILE=openapi.yaml HOST=127.0.0.1 PORT=8080)
+	@./bin/bash-http serve "$(OPENAPI_FILE)" --host "$(HOST)" --port "$(PORT)"
 
 check: lint format-check test ## Run lint, formatting checks, and all tests
