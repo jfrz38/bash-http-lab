@@ -23,7 +23,7 @@ trap cleanup EXIT INT TERM
 
 start_test_server() {
 	set -m
-	bash "$ROOT_DIR/bin/bash-http" serve --host "$TEST_HOST" --port "$TEST_PORT" \
+	bash "$ROOT_DIR/bin/bash-http" serve "$ROOT_DIR/openapi.yaml" --host "$TEST_HOST" --port "$TEST_PORT" \
 		>"$TEST_TMP_DIR/server.stdout" 2>"$TEST_TMP_DIR/server.stderr" &
 	SERVER_PID=$!
 	set +m
@@ -75,6 +75,12 @@ test_health_query_response() {
 	assert_equal '{"status":"ok"}' "$RESPONSE_BODY"
 }
 
+test_book_response() {
+	perform_request GET '/books/1'
+	assert_equal '200' "$HTTP_STATUS"
+	assert_equal '{"id":"1","title":"The Left Hand of Darkness"}' "$RESPONSE_BODY"
+}
+
 test_unknown_path_response() {
 	perform_request POST '/unknown'
 	assert_equal '404' "$HTTP_STATUS"
@@ -97,6 +103,7 @@ test_diagnostics_do_not_reach_stdout() {
 start_test_server
 run_test 'serves the exact health response' test_health_response
 run_test 'routes health requests with a query string' test_health_query_response
+run_test 'routes a captured book identifier' test_book_response
 run_test 'returns 404 for an unknown path' test_unknown_path_response
 run_test 'returns 405 and Allow for an unsupported health method' test_method_not_allowed_response
 run_test 'keeps listener diagnostics out of stdout' test_diagnostics_do_not_reach_stdout
