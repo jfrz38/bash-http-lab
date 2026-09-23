@@ -16,9 +16,10 @@ This directory is the source of truth for the project's technical direction:
 
 ## Current status
 
-The project is in **Phase 0: documentation**. No runtime has been implemented
-yet. Phase 1 will build the minimal HTTP server and a single `GET /health`
-endpoint. OpenAPI-driven routing begins in Phase 2.
+The project has implemented **Phase 1: minimal HTTP runtime**. It provides the
+CLI, a `socat` listener, strict request parsing, central response serialization,
+and a single temporary `GET /health` endpoint. OpenAPI-driven routing remains
+the next phase.
 
 ## Fixed constraints
 
