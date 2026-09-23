@@ -16,10 +16,11 @@ This directory is the source of truth for the project's technical direction:
 
 ## Current status
 
-The project has implemented **Phase 1: minimal HTTP runtime**. It provides the
-CLI, a `socat` listener, strict request parsing, central response serialization,
-and a single temporary `GET /health` endpoint. OpenAPI-driven routing remains
-the next phase.
+The project has implemented **Phase 2: OpenAPI routing**. It provides the
+minimal HTTP runtime from Phase 1 and now validates OpenAPI 3.0 documents,
+discovers routes and operation IDs, captures path parameters, and resolves
+handlers safely. Request bodies and complete request context remain deferred to
+Phase 3.
 
 ## Fixed constraints
 

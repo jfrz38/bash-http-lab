@@ -217,12 +217,12 @@ bash-http validate OPENAPI_FILE
   syntax.
 - The Phase 1 HTTP tests remain green after routing is replaced.
 
-### Decisions required before implementation
+### Adopted implementation decisions
 
-- path normalization and percent-decoding behavior;
-- exact list of accepted OpenAPI HTTP method keys;
-- handler directory configuration;
-- internal route representation.
+- paths are matched literally without normalization or percent decoding;
+- the standard OpenAPI 3.0 HTTP operation keys are recognized;
+- handlers live in the runtime's fixed `handlers/` directory;
+- routes use direct Bash arrays rather than generated code.
 
 ## Phase 3: Complete request context
 

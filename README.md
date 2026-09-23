@@ -2,8 +2,8 @@
 
 Experimental HTTP server built with Bash and Unix tools to expose the work that
 web frameworks normally hide. The current runtime implements one HTTP/1.1
-request per connection and a temporary `GET /health` endpoint. OpenAPI-driven
-routing begins in Phase 2.
+request per connection and discovers application routes and handlers from an
+OpenAPI 3.0 document.
 
 This is an educational project. It is not production-ready and should not be
 exposed to untrusted networks.
@@ -13,7 +13,8 @@ exposed to untrusted networks.
 The supported environments are Linux and WSL. Runtime requirements are:
 
 - Bash 5.2 or newer;
-- `socat`.
+- `socat`;
+- Mike Farah `yq` version 4.
 
 Development and tests additionally use `curl`, GNU Make, `shellcheck`, and
 `shfmt`. On Ubuntu 24.04 these tools can be installed with:
@@ -23,18 +24,23 @@ sudo apt-get update
 sudo apt-get install bash curl make shellcheck shfmt socat
 ```
 
+Install `yq` from the official
+[Mike Farah releases](https://github.com/mikefarah/yq/releases) and verify that
+`yq --version` identifies major version 4. Other programs named `yq` are not
+compatible.
+
 ## Usage
 
 Start the server on the default loopback address and port:
 
 ```bash
-./bin/bash-http serve
+./bin/bash-http serve openapi.yaml
 ```
 
 Select another host or port when needed:
 
 ```bash
-./bin/bash-http serve --host 127.0.0.1 --port 9090
+./bin/bash-http serve openapi.yaml --host 127.0.0.1 --port 9090
 ```
 
 Hosts must be IPv4 addresses or DNS hostnames. Ports must be integers from 1 to
@@ -52,8 +58,16 @@ The response body is exactly:
 {"status":"ok"}
 ```
 
-Use `./bin/bash-http help` for the current CLI. The `routes` and `validate`
-commands are reserved for Phase 2 and currently return a non-zero status.
+Inspect or validate the contract without starting the listener:
+
+```bash
+./bin/bash-http routes openapi.yaml
+./bin/bash-http validate openapi.yaml
+```
+
+The example contract also exposes `GET /books`, `GET /books/{bookId}`,
+`GET /authors`, and `GET /authors/{authorId}`. Its handlers use fixed data so
+the routing phase does not introduce persistence or joins.
 
 ## Development
 
@@ -80,7 +94,9 @@ processes and temporary files are cleaned up when the test exits.
 - one HTTP/1.1 request and response per connection;
 - strict CRLF request lines and headers;
 - no request bodies except `Content-Length: 0`;
-- `GET /health`, including requests with a query string;
+- OpenAPI-discovered routes with literal and whole-segment parameter matching;
+- static-segment precedence and captured path parameters;
+- `GET /health`, books, and authors from the example contract;
 - central `400`, `404`, `405`, `500`, and `501` responses;
 - `Connection: close` on every response.
 

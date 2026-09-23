@@ -198,10 +198,15 @@ Rules:
 - ambiguous templates are rejected during OpenAPI validation rather than being
   resolved according to document order.
 
-Percent decoding, encoded slashes, repeated slashes, dot segments, and trailing
-slash normalization require explicit decisions before Phase 2 implementation.
-Until then, paths are matched without normalization and `/users` differs from
-`/users/`.
+Phase 2 does not percent-decode or normalize paths. Encoded slashes, repeated
+slashes, dot segments, and trailing slashes remain literal and distinct;
+`/users` therefore differs from `/users/`. Path parameters must occupy an
+entire segment and use names that are valid Bash associative-array keys.
+
+The bundled educational contract exposes `GET /health`, collection and detail
+routes for books, and collection and detail routes for authors. Its fixed
+responses demonstrate routing only; persistence and relationships between
+resources are not part of Phase 2.
 
 ## Explicit non-goals
 

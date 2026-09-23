@@ -204,11 +204,56 @@ add code unrelated to its educational purpose.
 **Consequences:** Intentional CLI changes must be documented in the roadmap and
 release notes once releases exist.
 
+## D015: Match Phase 2 paths without normalization
+
+**Status:** Accepted for Phase 2
+
+Routing compares the parsed request path to OpenAPI templates without percent
+decoding or normalization. Trailing slashes, repeated slashes, dot segments,
+and encoded characters remain distinct input.
+
+**Rationale:** Normalization changes routing and security behavior. Deferring it
+is safer than silently choosing incomplete URL semantics during the routing
+phase.
+
+**Consequences:** `/books` and `/books/` are different paths. Templates support
+only literal segments and parameters that occupy a complete segment.
+
+## D016: Use a direct Bash route representation
+
+**Status:** Accepted for Phase 2
+
+The OpenAPI adapter loads methods, path templates, and operation IDs into
+parallel Bash arrays. The router splits paths into segments when matching and
+stores captured values in an associative array.
+
+**Rationale:** The route set is deliberately small, and a direct representation
+keeps the routing mechanics visible without generated code or an object model.
+
+**Consequences:** Each connection process reloads the trusted OpenAPI document.
+The `serve` command still validates it before starting the listener so invalid
+configuration cannot begin accepting traffic.
+
+## D017: Keep Phase 2 handler resolution conventional
+
+**Status:** Accepted for Phase 2
+
+Phase 2 accepts lowercase snake-case `operationId` values. An operation named
+`get_book` resolves to `handlers/get_book.sh` and the function
+`handle_get_book`. The handler directory is fixed relative to the runtime and
+is not configurable through request data or OpenAPI.
+
+**Rationale:** A strict convention demonstrates declarative handler resolution
+while making traversal and shell evaluation unnecessary.
+
+**Consequences:** Missing scripts or functions produce `501 Not Implemented`.
+Applications needing configurable handler roots or broader identifier syntax
+must introduce that behavior explicitly in a later phase.
+
 ## Deferred decisions
 
 The following decisions should be made when their implementation phase begins:
 
-- exact path percent-decoding and normalization rules;
 - representation of repeated query and header values;
 - detailed request-body storage strategy;
 - middleware short-circuit behavior;

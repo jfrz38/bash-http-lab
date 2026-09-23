@@ -79,8 +79,8 @@ lib/
   request.sh             HTTP request parsing
   response.sh            HTTP response construction
   errors.sh              Central HTTP error responses
-  openapi.sh             OpenAPI loading and route discovery (Phase 2)
-  router.sh              Route matching (Phase 2)
+  openapi.sh             OpenAPI loading and route discovery
+  router.sh              Route matching and handler resolution
   params.sh              Path, query, and header parameters (Phase 3)
   body.sh                Request body normalization (Phase 3)
   validation.sh          Supported schema constraints (Phase 4)
@@ -110,21 +110,13 @@ or dependency injection containers.
 checks only the dependencies needed by the selected command, and delegates to
 library functions. It must not parse HTTP or contain endpoint behavior.
 
-Phase 1 exposes:
-
-```text
-bash-http serve [--host HOST] [--port PORT]
-bash-http help
-```
-
-`routes` and `validate` may be recognized as reserved commands, but they must
-report that they are unavailable until Phase 2. The CLI must not accept an
-OpenAPI file and then ignore it. Phase 2 introduces the intended interface:
+The current CLI exposes:
 
 ```text
 bash-http serve OPENAPI_FILE [--host HOST] [--port PORT]
 bash-http routes OPENAPI_FILE
 bash-http validate OPENAPI_FILE
+bash-http help
 ```
 
 This is an intentional pre-1.0 CLI change rather than compatibility code for a
@@ -134,8 +126,8 @@ temporary interface.
 
 Dependency checks are command-specific:
 
-- `serve` in Phase 1 requires Bash and `socat`.
-- OpenAPI commands require Mike Farah `yq` v4 when introduced.
+- `serve` requires Bash, `socat`, and Mike Farah `yq` v4.
+- `routes` and `validate` require Mike Farah `yq` v4 but not `socat`.
 - Structured payload and log operations require `jq` when introduced.
 - Integration tests require `curl` and `socat`.
 - `make lint` requires `shellcheck`.
@@ -208,11 +200,7 @@ the request lifecycle.
 
 ### Router
 
-Phase 1 has one temporary route rule for `GET /health`. It exists only to prove
-the HTTP lifecycle and the `404` versus `405` distinction. It is not a second
-route registration mechanism to preserve.
-
-In Phase 2, the router receives route definitions discovered from OpenAPI and
+The router receives route definitions discovered from OpenAPI and
 returns one of these outcomes:
 
 - matching operation and extracted path parameters;
@@ -225,7 +213,7 @@ independent of handler loading.
 
 ### OpenAPI adapter
 
-Starting in Phase 2, `openapi.sh` uses Mike Farah `yq` v4 to read the supported
+`openapi.sh` uses Mike Farah `yq` v4 to read the supported
 OpenAPI 3.0 subset. It converts document data into a small internal route
 representation. No other module should contain `yq` queries.
 
@@ -235,8 +223,10 @@ unsupported feature.
 
 ### Handlers
 
-A handler is a Bash function contained in a script. In Phase 2 its function and
-file are resolved from a validated OpenAPI `operationId`. Handler scripts are
+A handler is a Bash function contained in a script. Its function and file are
+resolved from a validated lowercase snake-case OpenAPI `operationId`. For
+example, `get_book` maps to `handlers/get_book.sh` and `handle_get_book`.
+Handler scripts are
 sourced from a trusted project directory; client input never selects an
 arbitrary filesystem path.
 
