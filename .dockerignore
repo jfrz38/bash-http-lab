@@ -1,0 +1,6 @@
+.git
+.github
+.codebase-memory
+Dockerfile*
+compose*.yaml
+compose*.yml

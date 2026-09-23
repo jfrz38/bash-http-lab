@@ -11,23 +11,37 @@ source "$ROOT_DIR/lib/dependencies.sh"
 test_help() {
 	local output
 	output=$(bash "$ROOT_DIR/bin/bash-http" help)
-	assert_contains "$output" 'bash-http serve [--host HOST] [--port PORT]'
+	assert_contains "$output" 'bash-http serve OPENAPI_FILE [--host HOST] [--port PORT]'
 }
 
-test_reserved_command() {
+test_missing_openapi_file() {
 	local output status
 	set +e
-	output=$(bash "$ROOT_DIR/bin/bash-http" routes 2>&1)
+	output=$(bash "$ROOT_DIR/bin/bash-http" serve 2>&1)
 	status=$?
 	set -e
-	assert_equal '1' "$status"
-	assert_contains "$output" 'not available until Phase 2'
+	assert_equal '2' "$status"
+	assert_contains "$output" 'requires an OpenAPI file'
+}
+
+test_validate_openapi_file() {
+	local output
+	output=$(bash "$ROOT_DIR/bin/bash-http" validate "$ROOT_DIR/openapi.yaml")
+	assert_equal 'OpenAPI document is valid.' "$output"
+}
+
+test_lists_openapi_routes() {
+	local output
+	output=$(bash "$ROOT_DIR/bin/bash-http" routes "$ROOT_DIR/openapi.yaml")
+	assert_contains "$output" 'METHOD'
+	assert_contains "$output" 'GET      /books/{bookId}'
+	assert_contains "$output" 'get_author'
 }
 
 test_invalid_port_precedes_dependency_check() {
 	local output status
 	set +e
-	output=$(bash "$ROOT_DIR/bin/bash-http" serve --port 70000 2>&1)
+	output=$(bash "$ROOT_DIR/bin/bash-http" serve "$ROOT_DIR/openapi.yaml" --port 70000 2>&1)
 	status=$?
 	set -e
 	assert_equal '2' "$status"
@@ -37,7 +51,7 @@ test_invalid_port_precedes_dependency_check() {
 test_unsafe_host_is_rejected() {
 	local output status
 	set +e
-	output=$(bash "$ROOT_DIR/bin/bash-http" serve --host '127.0.0.1,reuseaddr' 2>&1)
+	output=$(bash "$ROOT_DIR/bin/bash-http" serve "$ROOT_DIR/openapi.yaml" --host '127.0.0.1,reuseaddr' 2>&1)
 	status=$?
 	set -e
 	assert_equal '2' "$status"
@@ -47,7 +61,7 @@ test_unsafe_host_is_rejected() {
 test_invalid_ipv4_is_rejected() {
 	local output status
 	set +e
-	output=$(bash "$ROOT_DIR/bin/bash-http" serve --host '999.999.999.999' 2>&1)
+	output=$(bash "$ROOT_DIR/bin/bash-http" serve "$ROOT_DIR/openapi.yaml" --host '999.999.999.999' 2>&1)
 	status=$?
 	set -e
 	assert_equal '2' "$status"
@@ -57,7 +71,7 @@ test_invalid_ipv4_is_rejected() {
 test_invalid_dns_name_is_rejected() {
 	local output status
 	set +e
-	output=$(bash "$ROOT_DIR/bin/bash-http" serve --host 'example..test' 2>&1)
+	output=$(bash "$ROOT_DIR/bin/bash-http" serve "$ROOT_DIR/openapi.yaml" --host 'example..test' 2>&1)
 	status=$?
 	set -e
 	assert_equal '2' "$status"
@@ -75,7 +89,9 @@ test_missing_socat_is_actionable() {
 }
 
 run_test 'prints CLI help' test_help
-run_test 'reports reserved Phase 2 commands' test_reserved_command
+run_test 'requires an OpenAPI file for serve' test_missing_openapi_file
+run_test 'validates an OpenAPI file' test_validate_openapi_file
+run_test 'lists routes from an OpenAPI file' test_lists_openapi_routes
 run_test 'rejects an invalid port before startup' test_invalid_port_precedes_dependency_check
 run_test 'rejects host option injection' test_unsafe_host_is_rejected
 run_test 'rejects an invalid IPv4 address' test_invalid_ipv4_is_rejected

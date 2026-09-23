@@ -12,8 +12,10 @@ source "$ROOT_DIR/lib/request.sh"
 source "$ROOT_DIR/lib/response.sh"
 # shellcheck source=../lib/errors.sh
 source "$ROOT_DIR/lib/errors.sh"
-# shellcheck source=../handlers/health.sh
-source "$ROOT_DIR/handlers/health.sh"
+# shellcheck source=../lib/openapi.sh
+source "$ROOT_DIR/lib/openapi.sh"
+# shellcheck source=../lib/router.sh
+source "$ROOT_DIR/lib/router.sh"
 # shellcheck source=../lib/server.sh
 source "$ROOT_DIR/lib/server.sh"
 
@@ -21,13 +23,15 @@ print_help() {
 	cat <<'EOF'
 Usage:
   bash-http help
-  bash-http serve [--host HOST] [--port PORT]
+  bash-http serve OPENAPI_FILE [--host HOST] [--port PORT]
+  bash-http routes OPENAPI_FILE
+  bash-http validate OPENAPI_FILE
 
 Commands:
   help      Show this help.
   serve     Start the HTTP server.
-  routes    Reserved for Phase 2.
-  validate  Reserved for Phase 2.
+  routes    List operations discovered from OpenAPI.
+  validate  Validate the supported OpenAPI routing subset.
 
 Serve defaults:
   host: 127.0.0.1
@@ -38,6 +42,14 @@ EOF
 serve_command() {
 	local host='127.0.0.1'
 	local port='8080'
+	local openapi_file
+
+	if (($# == 0)) || [[ $1 == --* ]]; then
+		printf 'The serve command requires an OpenAPI file.\n' >&2
+		return 2
+	fi
+	openapi_file=$1
+	shift
 
 	while (($# > 0)); do
 		case $1 in
@@ -62,8 +74,33 @@ serve_command() {
 
 	validate_host "$host" || return 2
 	validate_port "$port" || return 2
+	require_yq_v4 || return 1
+	if ! openapi_load_routes "$openapi_file"; then
+		printf '%s\n' "$OPENAPI_ERROR" >&2
+		return 1
+	fi
 	require_command socat || return 1
-	start_server "$host" "$port" "$ROOT_DIR/bin/bash-http"
+	start_server "$host" "$port" "$ROOT_DIR/bin/bash-http" "$openapi_file"
+}
+
+openapi_command() {
+	local command=$1
+	local openapi_file=${2:-}
+
+	if (($# != 2)); then
+		printf 'The %s command requires exactly one OpenAPI file.\n' "$command" >&2
+		return 2
+	fi
+	require_yq_v4 || return 1
+	if ! openapi_load_routes "$openapi_file"; then
+		printf '%s\n' "$OPENAPI_ERROR" >&2
+		return 1
+	fi
+	if [[ $command == 'routes' ]]; then
+		openapi_print_routes
+	else
+		printf 'OpenAPI document is valid.\n'
+	fi
 }
 
 main() {
@@ -82,16 +119,14 @@ main() {
 		print_help
 		;;
 	serve) serve_command "$@" ;;
-	routes | validate)
-		printf '%s is not available until Phase 2.\n' "$command" >&2
-		return 1
-		;;
+	routes | validate) openapi_command "$command" "$@" ;;
 	__handle-connection)
-		if (($# > 0)); then
-			printf 'The private connection operation does not accept arguments.\n' >&2
+		if (($# != 1)); then
+			printf 'The private connection operation requires an OpenAPI file.\n' >&2
 			return 2
 		fi
-		handle_connection
+		require_yq_v4 || return 1
+		handle_connection "$1" "$ROOT_DIR/handlers"
 		;;
 	*)
 		printf 'Unknown command: %s.\n' "$command" >&2

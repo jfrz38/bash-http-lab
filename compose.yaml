@@ -1,0 +1,35 @@
+name: bash-http-lab
+
+services:
+  server:
+    image: bash-http-lab:runtime
+    build:
+      context: .
+      target: runtime
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "${PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/health"]
+      interval: 2s
+      timeout: 15s
+      retries: 5
+      start_period: 5s
+
+  test:
+    profiles: ["test"]
+    image: bash-http-lab:test
+    build:
+      context: .
+      target: test
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true

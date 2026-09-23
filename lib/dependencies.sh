@@ -16,6 +16,20 @@ require_command() {
 	fi
 }
 
+require_yq_v4() {
+	local version
+
+	require_command yq || return 1
+	version=$(yq --version </dev/null 2>&1) || {
+		printf 'Unable to determine the installed yq version.\n' >&2
+		return 1
+	}
+	if [[ ! $version =~ mikefarah/yq.*version[[:space:]]+v?4\. ]]; then
+		printf 'bash-http requires Mike Farah yq version 4 (found: %s).\n' "$version" >&2
+		return 1
+	fi
+}
+
 validate_host() {
 	local host=$1
 	local ipv4_pattern='^([0-9]{1,3}\.){3}[0-9]{1,3}$'

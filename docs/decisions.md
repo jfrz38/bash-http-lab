@@ -34,7 +34,8 @@ versions.
 **Rationale:** `socat`, process signaling, filesystem semantics, and standard
 Unix tools behave consistently enough across Linux and WSL for the experiment.
 
-**Consequences:** Development from Windows should run the project inside WSL.
+**Consequences:** Development from Windows may run the project inside WSL or
+the documented Docker sandbox. Native Windows shells remain unsupported.
 Portable POSIX `sh` is not a goal.
 
 ## D003: Delegate TCP to socat
@@ -204,11 +205,80 @@ add code unrelated to its educational purpose.
 **Consequences:** Intentional CLI changes must be documented in the roadmap and
 release notes once releases exist.
 
+## D015: Match Phase 2 paths without normalization
+
+**Status:** Accepted for Phase 2
+
+Routing compares the parsed request path to OpenAPI templates without percent
+decoding or normalization. Trailing slashes, repeated slashes, dot segments,
+and encoded characters remain distinct input.
+
+**Rationale:** Normalization changes routing and security behavior. Deferring it
+is safer than silently choosing incomplete URL semantics during the routing
+phase.
+
+**Consequences:** `/books` and `/books/` are different paths. Templates support
+only literal segments and parameters that occupy a complete segment.
+
+## D016: Use a direct Bash route representation
+
+**Status:** Accepted for Phase 2
+
+The OpenAPI adapter loads methods, path templates, and operation IDs into
+parallel Bash arrays. The router splits paths into segments when matching and
+stores captured values in an associative array.
+
+**Rationale:** The route set is deliberately small, and a direct representation
+keeps the routing mechanics visible without generated code or an object model.
+
+**Consequences:** Each connection process reloads the trusted OpenAPI document.
+The `serve` command still validates it before starting the listener so invalid
+configuration cannot begin accepting traffic.
+
+## D017: Keep Phase 2 handler resolution conventional
+
+**Status:** Accepted for Phase 2
+
+Phase 2 accepts lowercase snake-case `operationId` values. An operation named
+`get_book` resolves to `handlers/get_book.sh` and the function
+`handle_get_book`. The handler directory is fixed relative to the runtime and
+is not configurable through request data or OpenAPI.
+
+**Rationale:** A strict convention demonstrates declarative handler resolution
+while making traversal and shell evaluation unnecessary.
+
+**Consequences:** Missing scripts or functions produce `501 Not Implemented`.
+Applications needing configurable handler roots or broader identifier syntax
+must introduce that behavior explicitly in a later phase.
+
+## D018: Use one containerized verification sandbox
+
+**Status:** Accepted for Phase 2
+
+A multi-stage Dockerfile builds a minimal runtime image and a test image with
+the complete development toolchain. Compose defines their local execution, and
+`make container-check` is the only containerized verification entry point used
+by GitHub Actions.
+
+The Debian base is pinned by digest. The Mike Farah `yq` version and supported
+architecture checksums are fixed in the Dockerfile. Both services run as a
+non-root user with a read-only root filesystem, a temporary `/tmp`, and
+`no-new-privileges`.
+
+**Rationale:** The supported tools were split between native Git Bash and WSL,
+which prevented the real network integration test from running in one local
+environment. A shared Linux sandbox makes local and CI results reproducible
+without replacing the native Make workflow.
+
+**Consequences:** Docker and the Compose plugin are required only for
+containerized verification. The image is not published or presented as a
+production deployment artifact. Native `make check` remains supported when the
+host provides all required tools.
+
 ## Deferred decisions
 
 The following decisions should be made when their implementation phase begins:
 
-- exact path percent-decoding and normalization rules;
 - representation of repeated query and header values;
 - detailed request-body storage strategy;
 - middleware short-circuit behavior;

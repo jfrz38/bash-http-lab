@@ -1,0 +1,17 @@
+openapi: 3.0.3
+info:
+  title: Ambiguous paths
+  version: 1.0.0
+paths:
+  /items/{itemId}:
+    get:
+      operationId: get_item
+      responses:
+        '200':
+          description: Item
+  /items/{name}:
+    get:
+      operationId: get_named_item
+      responses:
+        '200':
+          description: Item

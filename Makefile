@@ -6,6 +6,8 @@ SHELL := bash
 BASH_FILES := bin/bash-http $(wildcard lib/*.sh) $(wildcard handlers/*.sh) $(wildcard tests/*.sh) $(wildcard tests/unit/*.sh) $(wildcard tests/integration/*.sh)
 HOST ?= 127.0.0.1
 PORT ?= 8080
+OPENAPI_FILE ?= openapi.yaml
+COMPOSE ?= docker compose
 
 .PHONY: help
 help: ## List public targets
@@ -31,7 +33,23 @@ format-check: ## Verify Bash formatting
 	@shfmt -d $(BASH_FILES)
 
 .PHONY: run check
-run: ## Start the local server (HOST=127.0.0.1 PORT=8080)
-	@./bin/bash-http serve --host "$(HOST)" --port "$(PORT)"
+run: ## Start the local server (OPENAPI_FILE=openapi.yaml HOST=127.0.0.1 PORT=8080)
+	@./bin/bash-http serve "$(OPENAPI_FILE)" --host "$(HOST)" --port "$(PORT)"
 
 check: lint format-check test ## Run lint, formatting checks, and all tests
+
+.PHONY: container-build container-check container-up container-down
+container-build: ## Build runtime and test container images
+	@$(COMPOSE) --profile test build
+
+container-check: ## Run all checks and smoke-test the runtime image in containers
+	@trap '$(COMPOSE) down --remove-orphans >/dev/null 2>&1' EXIT; \
+		$(COMPOSE) --profile test run --build --rm -T test; \
+		$(COMPOSE) up --build --wait server; \
+		$(COMPOSE) exec -T server curl --fail --silent http://127.0.0.1:8080/health >/dev/null
+
+container-up: ## Start the containerized server (PORT=8080)
+	@$(COMPOSE) up --build --wait server
+
+container-down: ## Stop and remove sandbox containers
+	@$(COMPOSE) --profile test down --remove-orphans

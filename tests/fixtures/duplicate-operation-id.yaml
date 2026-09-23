@@ -1,0 +1,17 @@
+openapi: 3.0.3
+info:
+  title: Duplicate operation IDs
+  version: 1.0.0
+paths:
+  /books:
+    get:
+      operationId: duplicate
+      responses:
+        '200':
+          description: Books
+  /authors:
+    get:
+      operationId: duplicate
+      responses:
+        '200':
+          description: Authors
