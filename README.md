@@ -29,6 +29,12 @@ Install `yq` from the official
 `yq --version` identifies major version 4. Other programs named `yq` are not
 compatible.
 
+Docker Engine with the Compose plugin is an alternative development sandbox.
+It supplies the supported Linux runtime and every project tool, including
+`socat` and the pinned Mike Farah `yq` binary. The container image is for local
+development and CI verification only; it is not a production deployment
+artifact.
+
 ## Usage
 
 Start the server on the default loopback address and port:
@@ -83,7 +89,18 @@ make format             # format scripts with shfmt
 make format-check       # verify formatting
 make check              # run every required check
 make run                # run the server in the foreground
+make container-build    # build the runtime and test images
+make container-check    # run every check and smoke-test the runtime image
+make container-up       # start the sandbox server on PORT (default 8080)
+make container-down     # stop and remove sandbox containers
 ```
+
+With Docker, `make container-check` is the reproducible verification path used
+by CI. It runs lint, formatting checks, unit tests, and the real `socat` network
+integration test inside the test image before health-checking the minimal
+runtime image. After `make container-up`, the example API is available at
+`http://127.0.0.1:8080`; use `PORT=9090 make container-up` to change the host
+port.
 
 Integration tests use `TEST_HOST` and `TEST_PORT` when those environment
 variables are set. Startup uses bounded readiness probes, and all listener

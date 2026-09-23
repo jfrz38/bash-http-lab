@@ -28,6 +28,8 @@ Phase 3.
   part of the server.
 - Standard Unix CLI tools may be used when they provide substantial value.
 - Linux and WSL are the supported development and runtime environments.
+- Docker provides a reproducible Linux sandbox for development and CI, not a
+  production deployment artifact.
 - TCP listening is delegated to `socat`; Bash does not implement sockets.
 - OpenAPI becomes the source of truth for application routes in Phase 2.
 - Readability and explicit behavior take priority over metaprogramming and

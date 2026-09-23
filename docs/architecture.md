@@ -94,6 +94,9 @@ tests/
   test-helper.sh
   unit/
   integration/
+.github/workflows/checks.yaml  Containerized CI gate
+Dockerfile               Runtime and test image targets
+compose.yaml             Local sandbox orchestration
 openapi.yaml             Application contract, starting in Phase 2
 Makefile                 Canonical developer interface
 ```
@@ -101,6 +104,24 @@ Makefile                 Canonical developer interface
 The filenames describe responsibilities, not mandatory abstractions. A module
 should remain a small group of related functions and should not imitate classes
 or dependency injection containers.
+
+## Development sandbox
+
+The multi-stage Dockerfile has two roles built from the same pinned Debian
+base. The `runtime` target contains only the application and runtime tools. The
+`test` target adds Make, ShellCheck, shfmt, and the test sources. Both execute as
+an unprivileged user.
+
+Compose is the local orchestration layer. The server uses a read-only root
+filesystem, a temporary `/tmp`, `no-new-privileges`, and a healthcheck against
+`GET /health`. The test service applies the same restrictions and runs the
+canonical `make check` target with real `socat` and `curl` processes.
+
+`make container-check` builds and runs the test target, then starts and
+health-checks the runtime target. GitHub Actions invokes only this Make target,
+so local container verification and CI do not maintain separate command lists.
+These images are an educational and verification sandbox, not a production
+deployment definition or a published artifact.
 
 ## Runtime boundaries
 

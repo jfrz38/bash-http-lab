@@ -34,7 +34,8 @@ versions.
 **Rationale:** `socat`, process signaling, filesystem semantics, and standard
 Unix tools behave consistently enough across Linux and WSL for the experiment.
 
-**Consequences:** Development from Windows should run the project inside WSL.
+**Consequences:** Development from Windows may run the project inside WSL or
+the documented Docker sandbox. Native Windows shells remain unsupported.
 Portable POSIX `sh` is not a goal.
 
 ## D003: Delegate TCP to socat
@@ -249,6 +250,30 @@ while making traversal and shell evaluation unnecessary.
 **Consequences:** Missing scripts or functions produce `501 Not Implemented`.
 Applications needing configurable handler roots or broader identifier syntax
 must introduce that behavior explicitly in a later phase.
+
+## D018: Use one containerized verification sandbox
+
+**Status:** Accepted for Phase 2
+
+A multi-stage Dockerfile builds a minimal runtime image and a test image with
+the complete development toolchain. Compose defines their local execution, and
+`make container-check` is the only containerized verification entry point used
+by GitHub Actions.
+
+The Debian base is pinned by digest. The Mike Farah `yq` version and supported
+architecture checksums are fixed in the Dockerfile. Both services run as a
+non-root user with a read-only root filesystem, a temporary `/tmp`, and
+`no-new-privileges`.
+
+**Rationale:** The supported tools were split between native Git Bash and WSL,
+which prevented the real network integration test from running in one local
+environment. A shared Linux sandbox makes local and CI results reproducible
+without replacing the native Make workflow.
+
+**Consequences:** Docker and the Compose plugin are required only for
+containerized verification. The image is not published or presented as a
+production deployment artifact. Native `make check` remains supported when the
+host provides all required tools.
 
 ## Deferred decisions
 
