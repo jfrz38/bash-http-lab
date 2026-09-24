@@ -16,6 +16,8 @@ declare -a OPENAPI_BODY_OPERATION_IDS=()
 declare -a OPENAPI_BODY_REQUIRED=()
 declare -a OPENAPI_BODY_MEDIA_TYPES=()
 declare -a OPENAPI_BODY_SCHEMAS=()
+declare -a OPENAPI_MIDDLEWARE_OPERATION_IDS=()
+declare -a OPENAPI_MIDDLEWARE_NAMES=()
 OPENAPI_ERROR=''
 OPENAPI_PATH_SIGNATURE=''
 OPENAPI_PARAMETER_KEY=''
@@ -33,7 +35,53 @@ openapi_reset() {
 	OPENAPI_BODY_REQUIRED=()
 	OPENAPI_BODY_MEDIA_TYPES=()
 	OPENAPI_BODY_SCHEMAS=()
+	OPENAPI_MIDDLEWARE_OPERATION_IDS=()
+	OPENAPI_MIDDLEWARE_NAMES=()
 	OPENAPI_ERROR=''
+}
+
+openapi_load_middlewares() {
+	local file=$1
+	local path=$2
+	local method=$3
+	local operation_id=$4
+	local context="$method $path"
+	local middlewares_tag middleware_records middleware_record middleware_name middleware_tag
+	local -A seen_middlewares=()
+
+	middlewares_tag=$(OPENAPI_PATH=$path OPENAPI_KEY=$method yq eval '.paths[strenv(OPENAPI_PATH)][strenv(OPENAPI_KEY)].x-middlewares | tag' "$file" </dev/null 2>/dev/null) || return "$OPENAPI_INVALID"
+	[[ $middlewares_tag != '!!null' ]] || return 0
+	if [[ $middlewares_tag != '!!seq' ]]; then
+		openapi_fail "x-middlewares in $context must be a sequence." "$OPENAPI_INVALID"
+		return
+	fi
+	if [[ $(OPENAPI_PATH=$path OPENAPI_KEY=$method yq eval '.paths[strenv(OPENAPI_PATH)][strenv(OPENAPI_KEY)].x-middlewares | length' "$file" </dev/null 2>/dev/null) == '0' ]]; then
+		return 0
+	fi
+
+	middleware_records=$(OPENAPI_PATH=$path OPENAPI_KEY=$method yq eval --output-format=json --indent=0 '.paths[strenv(OPENAPI_PATH)][strenv(OPENAPI_KEY)].x-middlewares[]' "$file" </dev/null 2>/dev/null) || return "$OPENAPI_INVALID"
+	while IFS= read -r middleware_record; do
+		middleware_tag=$(yq eval 'tag' - <<<"$middleware_record" 2>/dev/null) || return "$OPENAPI_INVALID"
+		if [[ $middleware_tag != '!!str' ]]; then
+			openapi_fail "Middleware names in $context must be strings." "$OPENAPI_INVALID"
+			return
+		fi
+		middleware_name=$(yq eval --unwrapScalar '.' - <<<"$middleware_record" 2>/dev/null) || return "$OPENAPI_INVALID"
+		case $middleware_name in
+		requestId | logging) ;;
+		*)
+			openapi_fail "Unknown middleware '$middleware_name' in $context." "$OPENAPI_UNSUPPORTED"
+			return
+			;;
+		esac
+		if [[ -v "seen_middlewares[$middleware_name]" ]]; then
+			openapi_fail "Duplicate middleware '$middleware_name' in $context." "$OPENAPI_INVALID"
+			return
+		fi
+		seen_middlewares["$middleware_name"]=1
+		OPENAPI_MIDDLEWARE_OPERATION_IDS+=("$operation_id")
+		OPENAPI_MIDDLEWARE_NAMES+=("$middleware_name")
+	done <<<"$middleware_records"
 }
 
 openapi_fail() {
@@ -552,6 +600,7 @@ openapi_load_routes() {
 			fi
 			openapi_load_parameters "$file" "$path" "$key" "$operation_id" || return $?
 			openapi_load_request_body "$file" "$path" "$key" "$operation_id" || return $?
+			openapi_load_middlewares "$file" "$path" "$key" "$operation_id" || return $?
 			seen_operation_ids["$operation_id"]=1
 			method=${key^^}
 			OPENAPI_ROUTE_METHODS+=("$method")

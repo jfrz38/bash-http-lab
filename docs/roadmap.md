@@ -301,6 +301,8 @@ subset before invoking handlers.
 
 **Goal:** Demonstrate a simple synchronous middleware pipeline.
 
+**Status:** Complete.
+
 ### Scope
 
 - resolve ordered middleware from `x-middlewares`;
@@ -318,6 +320,18 @@ subset before invoking handlers.
 - Logs are valid JSON and never appear in the response stream.
 - Request IDs are stable across context, response, and log entry.
 - The pipeline remains synchronous and understandable in Bash.
+
+### Adopted implementation decisions
+
+- `x-middlewares` is an operation-level sequence containing only `requestId`
+  and `logging`; malformed, duplicate, and unknown entries fail document
+  validation;
+- before and after hooks run in declaration order after successful request
+  validation, with no application short-circuit contract;
+- valid request IDs match `[A-Za-z0-9._-]{1,128}`; otherwise Linux supplies a
+  UUID through `/proc/sys/kernel/random/uuid`;
+- logging emits one compact `jq`-built object after handler status selection and
+  before response serialization.
 
 ## Phase 6: Representation and content negotiation
 

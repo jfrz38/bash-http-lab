@@ -343,11 +343,29 @@ Keeping schema discovery in `openapi.sh` preserves the OpenAPI adapter boundary.
 not gain a runtime `jq` dependency. Validation failures use generic central
 `400` or `415` responses and never expose schema internals to clients.
 
+## D023: Keep middleware synchronous and operation-scoped
+
+**Status:** Accepted for Phase 5
+
+OpenAPI operations select ordered middleware through `x-middlewares`. The
+runtime executes explicit before and after hooks in declaration order only
+after request validation succeeds. Phase 5 middleware cannot intentionally
+short-circuit into an application response; hook failure is an internal error.
+
+**Rationale:** Two direct loops expose ordering and lifecycle mechanics without
+callback chains, continuations, or a generic plugin framework. Applying the
+pipeline only to validated operations gives middleware and handlers the same
+normalized request assumptions.
+
+**Consequences:** `requestId` and `logging` are the only accepted names.
+Middleware failures select `500`; before failures skip the handler. Request
+logs cover middleware and handler execution but not parsing, validation, or
+socket write time.
+
 ## Deferred decisions
 
 The following decisions should be made when their implementation phase begins:
 
-- middleware short-circuit behavior;
 - content negotiation precedence and fallback behavior;
 - persistence concurrency for the example users file;
 - generated handler formatting and overwrite policy flags;

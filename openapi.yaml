@@ -6,18 +6,21 @@ paths:
   /health:
     get:
       operationId: health
+      x-middlewares: [requestId, logging]
       responses:
         '200':
           description: Runtime health
   /books:
     get:
       operationId: list_books
+      x-middlewares: [requestId, logging]
       responses:
         '200':
           description: Books in the example catalog
   /books/{bookId}:
     get:
       operationId: get_book
+      x-middlewares: [requestId, logging]
       parameters:
         - name: bookId
           in: path
@@ -32,12 +35,14 @@ paths:
   /authors:
     get:
       operationId: list_authors
+      x-middlewares: [requestId, logging]
       responses:
         '200':
           description: Authors in the example catalog
   /authors/{authorId}:
     get:
       operationId: get_author
+      x-middlewares: [requestId, logging]
       parameters:
         - name: authorId
           in: path

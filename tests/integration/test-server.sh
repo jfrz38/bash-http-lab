@@ -57,15 +57,34 @@ stop_test_server() {
 perform_request() {
 	local method=$1
 	local path=$2
+	local request_id=${3:-}
+	local -a request_id_option=()
+
+	if [[ -n $request_id ]]; then
+		request_id_option=(--header "X-Request-Id: $request_id")
+	fi
 
 	HTTP_STATUS=$(curl --silent --show-error --max-time 2 --http1.1 \
 		--request "$method" \
+		"${request_id_option[@]}" \
 		--dump-header "$TEST_TMP_DIR/headers" \
 		--output "$TEST_TMP_DIR/body" \
 		--write-out '%{http_code}' \
 		"$TEST_BASE_URL$path")
 	RESPONSE_HEADERS=$(<"$TEST_TMP_DIR/headers")
 	RESPONSE_BODY=$(<"$TEST_TMP_DIR/body")
+}
+
+test_request_id_and_log_correlation() {
+	local log_record
+	perform_request GET '/books' 'integration-request-1'
+	assert_equal '200' "$HTTP_STATUS"
+	assert_contains "$RESPONSE_HEADERS" $'X-Request-Id: integration-request-1\r'
+	log_record=$(jq --compact-output 'select(.requestId == "integration-request-1")' "$TEST_TMP_DIR/server.stderr")
+	assert_equal 'integration-request-1' "$(jq --raw-output '.requestId' <<<"$log_record")"
+	assert_equal 'GET' "$(jq --raw-output '.method' <<<"$log_record")"
+	assert_equal '/books' "$(jq --raw-output '.path' <<<"$log_record")"
+	assert_equal '200' "$(jq --raw-output '.status' <<<"$log_record")"
 }
 
 perform_body_request() {
@@ -171,6 +190,7 @@ run_test 'routes health requests with a query string' test_health_query_response
 run_test 'routes a captured book identifier' test_book_response
 run_test 'returns 404 for an unknown path' test_unknown_path_response
 run_test 'returns 405 and Allow for an unsupported health method' test_method_not_allowed_response
+run_test 'correlates request context, response header, and JSON log' test_request_id_and_log_correlation
 run_test 'keeps listener diagnostics out of stdout' test_diagnostics_do_not_reach_stdout
 stop_test_server
 start_test_server "$ROOT_DIR/tests/fixtures/body-routing.yaml"

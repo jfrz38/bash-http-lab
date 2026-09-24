@@ -16,10 +16,10 @@ This directory is the source of truth for the project's technical direction:
 
 ## Current status
 
-The project has implemented **Phase 4: OpenAPI validation subset**. OpenAPI
-declares required path, query, and header parameters and top-level request
-bodies. Supported scalar constraints and body types are checked after request
-normalization and before handler execution.
+The project has implemented **Phase 5: Middleware and request observability**.
+OpenAPI operations select an ordered synchronous middleware pipeline. The
+bundled request ID and JSON logging middleware correlate handler context,
+response headers, and stderr request logs.
 
 ## Fixed constraints
 

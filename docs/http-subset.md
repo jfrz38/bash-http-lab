@@ -282,6 +282,37 @@ Full OpenAPI and JSON Schema validation, nested object validation, collection
 parameters, coercion aliases such as `1` for boolean, and per-field validation
 error responses are explicit non-goals of this phase.
 
+## Phase 5 middleware and request observability
+
+An operation may declare an ordered `x-middlewares` sequence:
+
+```yaml
+x-middlewares: [requestId, logging]
+```
+
+Only `requestId` and `logging` are supported. The extension must be a sequence
+of unique string names; malformed, duplicate, or unknown values make the
+OpenAPI document invalid or unsupported before the listener starts. Middleware
+runs only after routing, request normalization, and validation succeed.
+
+Before and after hooks both follow declaration order. The pipeline is
+synchronous and has no application-level short-circuit response. An internal
+hook failure selects `500 Internal Server Error`; a failed before hook skips the
+handler while applicable completed hooks still receive their after phase.
+
+`requestId` preserves `X-Request-Id` when it matches
+`[A-Za-z0-9._-]{1,128}`. Missing or invalid values are replaced with a UUID from
+the supported Linux runtime. The same value is available to handlers as
+`REQUEST_ID`, returned in exactly one `X-Request-Id` response header, and used
+by logging. Handlers cannot override the middleware-owned header.
+
+`logging` emits one compact JSON object to stderr after response status
+selection and before serialization. It contains `requestId`, `method`, `path`,
+numeric `status`, and non-negative integer `durationMs`. The path excludes the
+query string, and logs never include request bodies or arbitrary header values.
+Parse, route, normalization, and validation failures do not run operation
+middleware.
+
 ## Explicit non-goals
 
 The project does not plan to implement:

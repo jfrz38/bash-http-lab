@@ -6,6 +6,7 @@ paths:
   /context/{itemId}:
     post:
       operationId: request_context
+      x-middlewares: [requestId, logging]
       parameters:
         - name: itemId
           in: path

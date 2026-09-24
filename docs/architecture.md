@@ -38,8 +38,8 @@ curl or another HTTP client
             |
             +-> request parser
             +-> router
-            +-> validation       (Phase 4)
-            +-> middleware       (Phase 5)
+            +-> validation
+            +-> middleware
             +-> handler
             +-> response builder
 ```
@@ -147,7 +147,8 @@ temporary interface.
 
 Dependency checks are command-specific:
 
-- `serve` requires Bash, `socat`, and Mike Farah `yq` v4.
+- `serve` requires Bash, `socat`, and Mike Farah `yq` v4. It also requires
+  `jq` when any operation selects `logging`.
 - `routes` and `validate` require Mike Farah `yq` v4 but not `socat`.
 - JSON request normalization requires `jq` only when a JSON body is received.
 - Request validation requires `jq` only for operations that declare supported
@@ -191,10 +192,11 @@ The connection entry point coordinates the request lifecycle:
 3. Resolve the request to an operation and path parameters.
 4. Build query and header maps and normalize the request body.
 5. Validate declared parameters and request bodies.
-6. Invoke the selected handler when appropriate.
-7. Build exactly one response.
-8. Write the response to stdout.
-9. Clean up temporary resources and exit.
+6. Run selected middleware before hooks in declaration order.
+7. Invoke the selected handler when appropriate and select the response status.
+8. Run applicable middleware after hooks in declaration order.
+9. Write exactly one response to stdout.
+10. Clean up temporary resources and exit.
 
 It may select a central error response after another component reports an
 error, but it must not duplicate parser, router, or response formatting logic.
@@ -297,11 +299,18 @@ bound checks and returns typed statuses to connection orchestration. It neither
 formats HTTP responses nor invokes handlers. Invalid values therefore stop the
 lifecycle before application code executes.
 
-Middleware remains planned:
+Middleware is a synchronous, ordered pipeline selected per operation by the
+OpenAPI `x-middlewares` extension. Before hooks run after validation and before
+the handler; after hooks run after final handler status selection and before
+serialization. Phase 5 supports `requestId` and `logging`, does not expose an
+application short-circuit mechanism, and maps hook failures to a central `500`.
 
-- Middleware is a synchronous, ordered pipeline selected by the OpenAPI
-  `x-middlewares` extension. It runs before the handler and may contribute to
-  response state, but it will not imitate asynchronous callback semantics.
+The request ID middleware preserves a client value matching
+`[A-Za-z0-9._-]{1,128}` or generates a Linux UUID. It exposes `REQUEST_ID` to
+handlers and owns the single response `X-Request-Id` header. Logging measures
+middleware and handler execution and emits one compact JSON object to stderr
+with `requestId`, `method`, `path`, `status`, and integer `durationMs` fields.
+It records only the route path, not query values, headers, or request bodies.
 
 ## Error propagation
 

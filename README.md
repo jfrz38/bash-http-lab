@@ -4,7 +4,8 @@ Experimental HTTP server built with Bash and Unix tools to expose the work that
 web frameworks normally hide. The current runtime implements one HTTP/1.1
 request per connection, discovers routes from OpenAPI 3.0, builds a bounded
 request context, and validates a small OpenAPI request-schema subset before
-handlers run.
+handlers run. Operations can also declare ordered request ID and structured
+logging middleware.
 
 This is an educational project. It is not production-ready and should not be
 exposed to untrusted networks.
@@ -121,6 +122,8 @@ processes and temporary files are cleaned up when the test exits.
 - static-segment precedence and captured path parameters;
 - `GET /health`, books, and authors from the example contract;
 - central `400`, `404`, `405`, `413`, `415`, `500`, and `501` responses;
+- operation-level `x-middlewares` with `requestId` and `logging`;
+- stable `X-Request-Id` correlation and one JSON request log on stderr;
 - `Connection: close` on every response.
 
 See [`docs/`](docs/README.md) for architecture, exact protocol behavior,
