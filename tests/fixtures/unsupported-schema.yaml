@@ -1,0 +1,17 @@
+openapi: 3.0.3
+info:
+  title: Unsupported schema fixture
+  version: 1.0.0
+paths:
+  /search:
+    get:
+      operationId: search
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+            pattern: '^[a-z]+$'
+      responses:
+        '200':
+          description: Search result

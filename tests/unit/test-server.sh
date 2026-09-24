@@ -19,6 +19,8 @@ source "$ROOT_DIR/lib/response.sh"
 source "$ROOT_DIR/lib/errors.sh"
 # shellcheck source=../../lib/openapi.sh
 source "$ROOT_DIR/lib/openapi.sh"
+# shellcheck source=../../lib/validation.sh
+source "$ROOT_DIR/lib/validation.sh"
 # shellcheck source=../../lib/router.sh
 source "$ROOT_DIR/lib/router.sh"
 # shellcheck source=../../lib/server.sh
@@ -107,6 +109,36 @@ test_invalid_query_is_bad_request() {
 	assert_contains "$actual" 'HTTP/1.1 400 Bad Request'
 }
 
+test_invalid_openapi_parameter_is_bad_request() {
+	local actual
+	request_connection \
+		$'POST /context/0?q=left+hand HTTP/1.1\r\nContent-Length: 14\r\nContent-Type: application/json\r\nX-Trace: abc\r\n\r\n{"name":"Ada"}' \
+		"$ROOT_DIR/tests/fixtures/request-context.yaml" \
+		"$ROOT_DIR/tests/fixtures/handlers"
+	actual=$CONNECTION_RESPONSE
+	assert_contains "$actual" 'HTTP/1.1 400 Bad Request'
+}
+
+test_missing_required_parameter_is_bad_request() {
+	local actual
+	request_connection \
+		$'POST /context/42 HTTP/1.1\r\nContent-Length: 14\r\nContent-Type: application/json\r\nX-Trace: abc\r\n\r\n{"name":"Ada"}' \
+		"$ROOT_DIR/tests/fixtures/request-context.yaml" \
+		"$ROOT_DIR/tests/fixtures/handlers"
+	actual=$CONNECTION_RESPONSE
+	assert_contains "$actual" 'HTTP/1.1 400 Bad Request'
+}
+
+test_invalid_openapi_body_is_bad_request() {
+	local actual
+	request_connection \
+		$'POST /context/42?q=left+hand HTTP/1.1\r\nContent-Length: 2\r\nContent-Type: application/json\r\nX-Trace: abc\r\n\r\n[]' \
+		"$ROOT_DIR/tests/fixtures/request-context.yaml" \
+		"$ROOT_DIR/tests/fixtures/handlers"
+	actual=$CONNECTION_RESPONSE
+	assert_contains "$actual" 'HTTP/1.1 400 Bad Request'
+}
+
 test_unsupported_media_type() {
 	local actual
 	request_connection \
@@ -133,6 +165,9 @@ run_test 'returns 501 for an operation without a handler' test_missing_handler
 run_test 'returns 400 for malformed syntax' test_malformed_request
 run_test 'makes the complete request context available to handlers' test_request_context_reaches_handler
 run_test 'returns 400 for invalid query encoding' test_invalid_query_is_bad_request
+run_test 'returns 400 for an invalid OpenAPI parameter' test_invalid_openapi_parameter_is_bad_request
+run_test 'returns 400 for a missing required parameter' test_missing_required_parameter_is_bad_request
+run_test 'returns 400 for an invalid OpenAPI body' test_invalid_openapi_body_is_bad_request
 run_test 'returns 415 for unsupported request media' test_unsupported_media_type
 run_test 'returns 413 before reading an oversized body' test_oversized_body
 finish_tests

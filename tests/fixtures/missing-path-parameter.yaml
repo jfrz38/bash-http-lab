@@ -1,0 +1,11 @@
+openapi: 3.0.3
+info:
+  title: Missing path parameter fixture
+  version: 1.0.0
+paths:
+  /items/{itemId}:
+    get:
+      operationId: get_item
+      responses:
+        '200':
+          description: Item

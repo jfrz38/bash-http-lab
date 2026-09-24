@@ -150,6 +150,8 @@ Dependency checks are command-specific:
 - `serve` requires Bash, `socat`, and Mike Farah `yq` v4.
 - `routes` and `validate` require Mike Farah `yq` v4 but not `socat`.
 - JSON request normalization requires `jq` only when a JSON body is received.
+- Request validation requires `jq` only for operations that declare supported
+  parameter or body schemas.
 - Integration tests require `curl` and `socat`.
 - `make lint` requires `shellcheck`.
 - `make format` requires `shfmt`.
@@ -188,10 +190,11 @@ The connection entry point coordinates the request lifecycle:
 2. Parse stdin and capture the declared body bytes.
 3. Resolve the request to an operation and path parameters.
 4. Build query and header maps and normalize the request body.
-5. Invoke the selected handler when appropriate.
-6. Build exactly one response.
-7. Write the response to stdout.
-8. Clean up temporary resources and exit.
+5. Validate declared parameters and request bodies.
+6. Invoke the selected handler when appropriate.
+7. Build exactly one response.
+8. Write the response to stdout.
+9. Clean up temporary resources and exit.
 
 It may select a central error response after another component reports an
 error, but it must not duplicate parser, router, or response formatting logic.
@@ -238,8 +241,9 @@ independent of handler loading.
 ### OpenAPI adapter
 
 `openapi.sh` uses Mike Farah `yq` v4 to read the supported
-OpenAPI 3.0 subset. It converts document data into a small internal route
-representation. No other module should contain `yq` queries.
+OpenAPI 3.0 subset. It converts document data into small internal route and
+validation representations. No other module should contain OpenAPI `yq`
+queries; body normalization may use `yq` to parse a YAML representation.
 
 The adapter validates required structural rules before serving traffic. It
 must distinguish an invalid document from a valid document that uses an
@@ -287,15 +291,17 @@ return a transport-neutral structured representation.
 
 ### Validation and middleware
 
-These boundaries are planned, not designed in detail yet:
+Validation receives normalized parameter maps and body state plus the flat
+metadata produced by the OpenAPI adapter. It uses `jq` for type, enum, and
+bound checks and returns typed statuses to connection orchestration. It neither
+formats HTTP responses nor invokes handlers. Invalid values therefore stop the
+lifecycle before application code executes.
 
-- Validation receives parsed values and the supported OpenAPI constraints. It
-  returns validated values or structured errors before handler execution.
+Middleware remains planned:
+
 - Middleware is a synchronous, ordered pipeline selected by the OpenAPI
   `x-middlewares` extension. It runs before the handler and may contribute to
   response state, but it will not imitate asynchronous callback semantics.
-
-Their detailed interfaces will be decided when their phases begin.
 
 ## Error propagation
 

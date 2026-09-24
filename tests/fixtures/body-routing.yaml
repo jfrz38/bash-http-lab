@@ -6,6 +6,12 @@ paths:
   /body:
     post:
       operationId: health
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
       responses:
         '200':
           description: Body accepted before invoking a known handler

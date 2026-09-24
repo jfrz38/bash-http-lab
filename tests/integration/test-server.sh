@@ -71,6 +71,7 @@ perform_request() {
 perform_body_request() {
 	local content_type=$1
 	local body=$2
+	local path=${3:-/body}
 
 	HTTP_STATUS=$(curl --silent --show-error --max-time 2 --http1.1 \
 		--request POST \
@@ -79,7 +80,7 @@ perform_body_request() {
 		--dump-header "$TEST_TMP_DIR/headers" \
 		--output "$TEST_TMP_DIR/body" \
 		--write-out '%{http_code}' \
-		"$TEST_BASE_URL/body")
+		"$TEST_BASE_URL$path")
 	RESPONSE_HEADERS=$(<"$TEST_TMP_DIR/headers")
 	RESPONSE_BODY=$(<"$TEST_TMP_DIR/body")
 }
@@ -148,6 +149,12 @@ test_rejects_unsupported_media_type() {
 	assert_equal '{"error":"Unsupported Media Type"}' "$RESPONSE_BODY"
 }
 
+test_rejects_wrong_openapi_body_type() {
+	perform_body_request 'application/json' '[]'
+	assert_equal '400' "$HTTP_STATUS"
+	assert_equal '{"error":"Bad Request"}' "$RESPONSE_BODY"
+}
+
 test_rejects_oversized_declared_body() {
 	perform_raw_request $'POST /body HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1048577\r\nContent-Type: text/plain\r\n\r\n'
 	assert_contains "$RAW_RESPONSE" 'HTTP/1.1 413 Content Too Large'
@@ -169,6 +176,7 @@ stop_test_server
 start_test_server "$ROOT_DIR/tests/fixtures/body-routing.yaml"
 run_test 'accepts a valid JSON body over the network' test_accepts_valid_json_body
 run_test 'rejects malformed JSON over the network' test_rejects_malformed_json_body
+run_test 'rejects a body with the wrong OpenAPI type' test_rejects_wrong_openapi_body_type
 run_test 'returns 415 for unsupported request media' test_rejects_unsupported_media_type
 run_test 'returns 413 for an oversized declared body' test_rejects_oversized_declared_body
 run_test 'returns 400 for premature request-body EOF' test_rejects_premature_body_eof

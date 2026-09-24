@@ -241,6 +241,47 @@ Malformed JSON or YAML, an invalid media type, or a non-empty body without
 unsupported media type returns `415 Unsupported Media Type`. `jq` is checked
 only when a JSON body needs normalization.
 
+## Phase 4 OpenAPI request validation
+
+After routing and request-context normalization, the runtime validates declared
+parameters and request bodies before invoking the handler. Parameters may be
+declared at path-item or operation level; an operation declaration with the
+same `in` and `name` overrides the path-item declaration. Header names are
+matched case-insensitively. Every path placeholder must have a matching
+required `in: path` parameter. Undeclared query and header values are allowed.
+
+The supported parameter locations and types are:
+
+| Input | Supported schema types |
+| --- | --- |
+| Path, query, or header parameter | `string`, `integer`, `number`, `boolean` |
+| Top-level request body | `string`, `integer`, `number`, `boolean`, `object`, `array` |
+
+Conversions are intentionally strict. Integer and number parameter values use
+JSON number syntax, and boolean parameters are exactly `true` or `false`.
+Strings remain decoded strings. Object and array parameters are unsupported
+because the request context stores one scalar value per name.
+
+Inline schemas may contain only `type`, `enum`, `minimum`, `maximum`,
+`minLength`, `maxLength`, `description`, and `example`. Numeric bounds apply
+only to `integer` and `number`; length bounds apply only to `string`. Enum
+members must have the declared type. References, composition, formats,
+patterns, nested `properties`, array `items`, defaults, nullable values, and
+additional JSON Schema or OpenAPI schema keywords are rejected by `validate`
+and before `serve` starts rather than ignored.
+
+Request bodies use an inline schema for each declared media type. The supported
+declarations are `application/json`, `application/yaml`,
+`application/x-yaml`, `text/yaml`, `text/x-yaml`, and `text/plain`. A non-empty
+body for an operation without a matching declared media type returns `415
+Unsupported Media Type`. A missing required value or body, failed conversion,
+type mismatch, enum mismatch, or failed bound returns the central `400 Bad
+Request` response. In every case validation finishes before the handler runs.
+
+Full OpenAPI and JSON Schema validation, nested object validation, collection
+parameters, coercion aliases such as `1` for boolean, and per-field validation
+error responses are explicit non-goals of this phase.
+
 ## Explicit non-goals
 
 The project does not plan to implement:
