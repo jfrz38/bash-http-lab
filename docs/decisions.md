@@ -275,12 +275,43 @@ containerized verification. The image is not published or presented as a
 production deployment artifact. Native `make check` remains supported when the
 host provides all required tools.
 
+## D019: Reject repeated query values in the initial context
+
+**Status:** Accepted for Phase 3
+
+Query names and values use form-style `+` and `%HH` decoding, but repeated
+decoded names are rejected with `400 Bad Request`. Header names remain unique
+under the existing duplicate-header rule, and path parameter names are unique
+within a route template.
+
+**Rationale:** Bash associative arrays cannot preserve repeated values without
+another representation. Rejecting them avoids silently choosing first-wins or
+last-wins semantics before the project has a concrete list-valued use case.
+
+**Consequences:** Clients must send at most one value for each query name. A
+future phase may introduce ordered multi-value storage as an explicit contract
+change.
+
+## D020: Store request bodies in private temporary files
+
+**Status:** Accepted for Phase 3
+
+Each connection stores raw and normalized body data in a private temporary
+directory. Structured JSON and YAML bodies are exposed to handlers as a
+normalized JSON file; plain text is copied without command substitution.
+
+**Rationale:** Bash variables cannot represent NUL bytes and command
+substitution removes trailing newlines. Files preserve the declared byte stream
+and let external parsers operate without loading the complete body into shell
+state.
+
+**Consequences:** Every parsed connection creates short-lived filesystem state
+that must be cleaned on every exit path. Binary media types remain unsupported.
+
 ## Deferred decisions
 
 The following decisions should be made when their implementation phase begins:
 
-- representation of repeated query and header values;
-- detailed request-body storage strategy;
 - middleware short-circuit behavior;
 - content negotiation precedence and fallback behavior;
 - persistence concurrency for the example users file;

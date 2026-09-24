@@ -81,8 +81,8 @@ lib/
   errors.sh              Central HTTP error responses
   openapi.sh             OpenAPI loading and route discovery
   router.sh              Route matching and handler resolution
-  params.sh              Path, query, and header parameters (Phase 3)
-  body.sh                Request body normalization (Phase 3)
+  params.sh              Path, query, and header parameter context
+  body.sh                Request body storage and normalization
   validation.sh          Supported schema constraints (Phase 4)
   middleware.sh          Synchronous middleware pipeline (Phase 5)
 handlers/
@@ -149,13 +149,14 @@ Dependency checks are command-specific:
 
 - `serve` requires Bash, `socat`, and Mike Farah `yq` v4.
 - `routes` and `validate` require Mike Farah `yq` v4 but not `socat`.
-- Structured payload and log operations require `jq` when introduced.
+- JSON request normalization requires `jq` only when a JSON body is received.
 - Integration tests require `curl` and `socat`.
 - `make lint` requires `shellcheck`.
 - `make format` requires `shfmt`.
 
-The health endpoint must not depend on `jq` or `yq`. Missing tools produce an
-actionable error before the requested operation starts.
+The health endpoint does not depend on `jq`. OpenAPI commands and server
+startup require `yq`; a missing body parser produces an actionable error only
+when that representation is received.
 
 ### Transport adapter
 
@@ -183,13 +184,14 @@ concurrency controls.
 
 The connection entry point coordinates the request lifecycle:
 
-1. Initialize request and response state.
-2. Parse stdin into request state.
-3. Resolve the request to an outcome.
-4. Invoke the selected handler when appropriate.
-5. Build exactly one response.
-6. Write the response to stdout.
-7. Clean up temporary resources and exit.
+1. Initialize request, parameter, body, and response state.
+2. Parse stdin and capture the declared body bytes.
+3. Resolve the request to an operation and path parameters.
+4. Build query and header maps and normalize the request body.
+5. Invoke the selected handler when appropriate.
+6. Build exactly one response.
+7. Write the response to stdout.
+8. Clean up temporary resources and exit.
 
 It may select a central error response after another component reports an
 error, but it must not duplicate parser, router, or response formatting logic.
@@ -209,11 +211,12 @@ REQUEST_PATH
 REQUEST_QUERY_STRING
 REQUEST_HTTP_VERSION
 REQUEST_HEADERS[name]
+REQUEST_CONTENT_LENGTH
 ```
 
-These names are illustrative until implementation, but the ownership rule is
-not: only the parser populates raw HTTP request state. Later components may add
-derived path, query, and validated parameter maps.
+Only the parser populates raw HTTP request state. `params.sh` derives separate
+`REQUEST_PATH_PARAMS`, `REQUEST_QUERY_PARAMS`, and `REQUEST_HEADER_PARAMS` maps
+after routing. Handlers use those maps rather than router-owned state.
 
 Bash state should remain in the current process when practical. Pipelines and
 subshells must not be used where losing array or variable mutations would alter
@@ -313,13 +316,11 @@ diagnostic on stderr.
 
 ## Temporary data
 
-Request bodies may use temporary files when preserving exact bytes is safer
-than storing them in shell variables. Any temporary directory must be created
-with `mktemp -d`, have restrictive permissions, and be removed through a
-`trap` on normal exit and handled signals.
-
-Phase 1 does not support request bodies and therefore should not create body
-temporary files.
+Request bodies use per-connection temporary files because shell variables
+cannot preserve arbitrary bytes safely. `body.sh` creates a mode-700 directory
+with `mktemp -d`, stores raw and normalized representations separately, and
+removes the directory on normal completion, handled failures, and process exit
+through the connection trap.
 
 ## Security and operational posture
 

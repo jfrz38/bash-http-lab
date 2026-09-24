@@ -4,12 +4,14 @@
 readonly REQUEST_PARSE_BAD_REQUEST=10
 readonly REQUEST_PARSE_NOT_IMPLEMENTED=11
 readonly REQUEST_PARSE_TIMEOUT=12
+readonly REQUEST_PARSE_TOO_LARGE=13
 
 readonly REQUEST_LINE_LIMIT=8192
 readonly REQUEST_HEADER_LINE_LIMIT=8192
 readonly REQUEST_HEADER_COUNT_LIMIT=100
 readonly REQUEST_HEADER_BYTES_LIMIT=65536
 readonly REQUEST_TIMEOUT_SECONDS=10
+readonly REQUEST_BODY_BYTES_LIMIT=1048576
 
 # Request state is populated here and consumed by later lifecycle modules.
 REQUEST_METHOD=''
@@ -17,6 +19,7 @@ REQUEST_TARGET=''
 REQUEST_PATH=''
 REQUEST_QUERY_STRING=''
 REQUEST_HTTP_VERSION=''
+REQUEST_CONTENT_LENGTH=0
 declare -A REQUEST_HEADERS=()
 
 request_reset() {
@@ -25,6 +28,7 @@ request_reset() {
 	REQUEST_PATH=''
 	REQUEST_QUERY_STRING=''
 	REQUEST_HTTP_VERSION=''
+	REQUEST_CONTENT_LENGTH=0
 	REQUEST_HEADERS=()
 }
 
@@ -137,13 +141,32 @@ validate_request_framing() {
 		if [[ ! $content_length =~ ^[0-9]+$ ]]; then
 			return "$REQUEST_PARSE_BAD_REQUEST"
 		fi
-		if [[ ! $content_length =~ ^0+$ ]]; then
-			return "$REQUEST_PARSE_NOT_IMPLEMENTED"
+		content_length=${content_length#"${content_length%%[!0]*}"}
+		content_length=${content_length:-0}
+		if ((${#content_length} > ${#REQUEST_BODY_BYTES_LIMIT})) ||
+			((${#content_length} == ${#REQUEST_BODY_BYTES_LIMIT} && 10#$content_length > REQUEST_BODY_BYTES_LIMIT)); then
+			return "$REQUEST_PARSE_TOO_LARGE"
 		fi
+		REQUEST_CONTENT_LENGTH=$((10#$content_length))
 	fi
 }
 
+read_request_body() {
+	local destination=$1
+	local bytes_read
+
+	: >"$destination" || return 1
+	if ((REQUEST_CONTENT_LENGTH == 0)); then
+		return 0
+	fi
+	dd bs=1 count="$REQUEST_CONTENT_LENGTH" of="$destination" status=none 2>/dev/null || return 1
+	bytes_read=$(wc -c <"$destination") || return 1
+	bytes_read=${bytes_read//[[:space:]]/}
+	[[ $bytes_read == "$REQUEST_CONTENT_LENGTH" ]] || return "$REQUEST_PARSE_BAD_REQUEST"
+}
+
 parse_request() {
+	local body_file=${1:-}
 	local parse_status header_count=0 header_bytes=0
 	local LC_ALL=C
 
@@ -178,5 +201,11 @@ parse_request() {
 		parse_header_line "$HTTP_LINE" || return "$REQUEST_PARSE_BAD_REQUEST"
 	done
 
-	validate_request_framing
+	validate_request_framing || return $?
+	if ((REQUEST_CONTENT_LENGTH > 0)) && [[ -z $body_file ]]; then
+		return "$REQUEST_PARSE_BAD_REQUEST"
+	fi
+	if [[ -n $body_file ]]; then
+		read_request_body "$body_file"
+	fi
 }

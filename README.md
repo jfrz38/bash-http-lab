@@ -2,8 +2,8 @@
 
 Experimental HTTP server built with Bash and Unix tools to expose the work that
 web frameworks normally hide. The current runtime implements one HTTP/1.1
-request per connection and discovers application routes and handlers from an
-OpenAPI 3.0 document.
+request per connection, discovers routes from OpenAPI 3.0, and builds a bounded
+request context for handlers.
 
 This is an educational project. It is not production-ready and should not be
 exposed to untrusted networks.
@@ -14,6 +14,7 @@ The supported environments are Linux and WSL. Runtime requirements are:
 
 - Bash 5.2 or newer;
 - `socat`;
+- `jq` for JSON request bodies;
 - Mike Farah `yq` version 4.
 
 Development and tests additionally use `curl`, GNU Make, `shellcheck`, and
@@ -21,7 +22,7 @@ Development and tests additionally use `curl`, GNU Make, `shellcheck`, and
 
 ```bash
 sudo apt-get update
-sudo apt-get install bash curl make shellcheck shfmt socat
+sudo apt-get install bash curl jq make shellcheck shfmt socat
 ```
 
 Install `yq` from the official
@@ -110,11 +111,13 @@ processes and temporary files are cleaned up when the test exits.
 
 - one HTTP/1.1 request and response per connection;
 - strict CRLF request lines and headers;
-- no request bodies except `Content-Length: 0`;
+- request bodies up to 1 MiB using `Content-Length`;
+- JSON validation, YAML-to-JSON normalization, and byte-preserving plain text;
+- separate path, decoded query, and normalized header parameter maps;
 - OpenAPI-discovered routes with literal and whole-segment parameter matching;
 - static-segment precedence and captured path parameters;
 - `GET /health`, books, and authors from the example contract;
-- central `400`, `404`, `405`, `500`, and `501` responses;
+- central `400`, `404`, `405`, `413`, `415`, `500`, and `501` responses;
 - `Connection: close` on every response.
 
 See [`docs/`](docs/README.md) for architecture, exact protocol behavior,

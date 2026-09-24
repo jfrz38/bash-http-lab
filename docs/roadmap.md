@@ -228,6 +228,8 @@ bash-http validate OPENAPI_FILE
 
 **Goal:** Build the request context needed by realistic handlers.
 
+**Status:** Complete.
+
 ### Scope
 
 - normalized request headers and helper access;
@@ -248,6 +250,15 @@ bash-http validate OPENAPI_FILE
 - Malformed JSON or YAML returns a client error before the handler runs.
 - Required parsing tools are checked only for operations that need them.
 - Temporary body resources are private and always cleaned up.
+
+### Adopted implementation decisions
+
+- request bodies are limited to 1 MiB and stored in private temporary files;
+- over-limit bodies return `413`, unsupported media types return `415`, and
+  malformed framing or representations return `400`;
+- query decoding supports `+` and `%HH`, while paths remain literal;
+- repeated decoded query names are rejected rather than silently collapsed;
+- JSON and YAML share a normalized JSON-file representation for handlers.
 
 ## Phase 4: OpenAPI validation subset
 
