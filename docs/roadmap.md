@@ -338,6 +338,8 @@ subset before invoking handlers.
 **Goal:** Support multiple input and output representations without rewriting
 handlers.
 
+**Status:** Complete.
+
 ### Scope
 
 - JSON, `application/yaml`, `text/yaml`, and `text/plain` input as applicable;
@@ -354,6 +356,21 @@ handlers.
 - Negotiation behavior and fallback rules are documented and tested.
 - Unsupported request and response media types have distinct errors.
 - Response-schema validation remains deferred.
+
+### Adopted implementation decisions
+
+- handlers submit one JSON structured value and do not choose an output media
+  type;
+- missing or empty `Accept` selects JSON, while exact ranges, `type/*`, `*/*`,
+  and quality values select between `application/json`, `application/yaml`, and
+  `text/yaml`;
+- a more specific range determines a representation's quality, and ties use
+  the stable server preference JSON, `application/yaml`, then `text/yaml`;
+- `q=0` excludes a representation and no acceptable representation selects the
+  central JSON `406` response;
+- OpenAPI response metadata tracks explicit three-digit statuses; an
+  undocumented handler status emits a warning but is still served;
+- response schemas and OpenAPI `default` responses remain unsupported.
 
 ## Phase 7: Developer tooling and example API
 

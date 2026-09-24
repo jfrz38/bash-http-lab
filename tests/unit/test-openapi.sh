@@ -23,6 +23,29 @@ test_loads_catalog_routes() {
 	assert_equal '10' "${#OPENAPI_MIDDLEWARE_NAMES[@]}"
 	assert_equal 'requestId' "${OPENAPI_MIDDLEWARE_NAMES[0]}"
 	assert_equal 'logging' "${OPENAPI_MIDDLEWARE_NAMES[1]}"
+	assert_equal '7' "${#OPENAPI_RESPONSE_STATUSES[@]}"
+	assert_equal '200' "${OPENAPI_RESPONSE_STATUSES[0]}"
+	assert_equal '404' "${OPENAPI_RESPONSE_STATUSES[3]}"
+	openapi_response_status_is_documented 'get_book' 404 || fail 'expected get_book 404 to be documented'
+	if openapi_response_status_is_documented 'health' 404; then
+		fail 'expected health 404 to be undocumented'
+	fi
+}
+
+test_rejects_unsupported_response_status() {
+	local status
+	openapi_load_routes "$ROOT_DIR/tests/fixtures/unsupported-response-status.yaml"
+	status=$?
+	assert_equal "$OPENAPI_UNSUPPORTED" "$status"
+	assert_contains "$OPENAPI_ERROR" "Unsupported response status 'default'"
+}
+
+test_rejects_malformed_response() {
+	local status
+	openapi_load_routes "$ROOT_DIR/tests/fixtures/malformed-response.yaml"
+	status=$?
+	assert_equal "$OPENAPI_INVALID" "$status"
+	assert_contains "$OPENAPI_ERROR" "response '200' in get /health must be a mapping"
 }
 
 test_rejects_unknown_middleware() {
@@ -107,4 +130,6 @@ run_test 'requires every template parameter to be declared' test_requires_path_p
 run_test 'rejects unknown middleware' test_rejects_unknown_middleware
 run_test 'rejects duplicate middleware declarations' test_rejects_duplicate_middleware
 run_test 'requires middleware declarations to be a sequence' test_rejects_malformed_middleware_list
+run_test 'rejects unsupported response status keys' test_rejects_unsupported_response_status
+run_test 'requires response declarations to be mappings' test_rejects_malformed_response
 finish_tests

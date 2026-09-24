@@ -66,6 +66,36 @@ test_books_route() {
 	assert_contains "$actual" 'The Left Hand of Darkness'
 }
 
+test_negotiates_yaml_response() {
+	local actual
+	request_connection $'GET /health HTTP/1.1\r\nAccept: text/yaml\r\n\r'
+	actual=$CONNECTION_RESPONSE
+	assert_contains "$actual" 'HTTP/1.1 200 OK'
+	assert_contains "$actual" $'Content-Type: text/yaml\r\n'
+	assert_contains "$actual" $'\r\n\r\nstatus: ok'
+}
+
+test_returns_not_acceptable_and_logs_final_status() {
+	local actual log_record
+	request_connection $'GET /health HTTP/1.1\r\nAccept: image/png\r\nX-Request-Id: unacceptable\r\n\r'
+	actual=$CONNECTION_RESPONSE
+	assert_contains "$actual" 'HTTP/1.1 406 Not Acceptable'
+	assert_contains "$actual" '{"error":"Not Acceptable"}'
+	log_record=$(jq --compact-output 'select(.requestId == "unacceptable")' <<<"$CONNECTION_STDERR")
+	assert_equal '406' "$(jq --raw-output '.status' <<<"$log_record")"
+}
+
+test_warns_for_undocumented_handler_status() {
+	local actual
+	request_connection \
+		$'GET /warning HTTP/1.1\r\n\r' \
+		"$ROOT_DIR/tests/fixtures/undocumented-status.yaml" \
+		"$ROOT_DIR/tests/fixtures/handlers"
+	actual=$CONNECTION_RESPONSE
+	assert_contains "$actual" 'HTTP/1.1 404 Not Found'
+	assert_contains "$CONNECTION_STDERR" 'Handler status_warning selected undocumented response status 404.'
+}
+
 test_unknown_path() {
 	local actual
 	request_connection $'POST /unknown HTTP/1.1\r\n\r'
@@ -173,6 +203,9 @@ test_oversized_body() {
 run_test 'routes GET /health' test_health_route
 run_test 'ignores the query string for routing' test_health_query_route
 run_test 'routes a captured book identifier' test_books_route
+run_test 'negotiates a YAML representation' test_negotiates_yaml_response
+run_test 'returns 406 and logs the negotiated status' test_returns_not_acceptable_and_logs_final_status
+run_test 'warns when a handler status is not documented' test_warns_for_undocumented_handler_status
 run_test 'returns 404 before considering the method' test_unknown_path
 run_test 'returns 405 and Allow for /health' test_unsupported_health_method
 run_test 'returns 501 for an operation without a handler' test_missing_handler

@@ -91,9 +91,7 @@ serve_command() {
 		printf '%s\n' "$OPENAPI_ERROR" >&2
 		return 1
 	fi
-	if [[ " ${OPENAPI_MIDDLEWARE_NAMES[*]} " == *' logging '* ]]; then
-		require_command jq || return 1
-	fi
+	require_command jq || return 1
 	require_command socat || return 1
 	start_server "$host" "$port" "$ROOT_DIR/bin/bash-http" "$openapi_file"
 }
@@ -141,6 +139,7 @@ main() {
 			return 2
 		fi
 		require_yq_v4 || return 1
+		require_command jq || return 1
 		trap body_cleanup EXIT INT TERM
 		handle_connection "$1" "$ROOT_DIR/handlers"
 		;;

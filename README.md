@@ -5,7 +5,8 @@ web frameworks normally hide. The current runtime implements one HTTP/1.1
 request per connection, discovers routes from OpenAPI 3.0, builds a bounded
 request context, and validates a small OpenAPI request-schema subset before
 handlers run. Operations can also declare ordered request ID and structured
-logging middleware.
+logging middleware. Handlers return one structured JSON value that the response
+builder can serialize as JSON or YAML through `Accept` negotiation.
 
 This is an educational project. It is not production-ready and should not be
 exposed to untrusted networks.
@@ -16,7 +17,7 @@ The supported environments are Linux and WSL. Runtime requirements are:
 
 - Bash 5.2 or newer;
 - `socat`;
-- `jq` for JSON request bodies;
+- `jq` for structured responses and JSON request bodies;
 - Mike Farah `yq` version 4.
 
 Development and tests additionally use `curl`, GNU Make, `shellcheck`, and
@@ -59,6 +60,7 @@ With the server running:
 
 ```bash
 curl http://127.0.0.1:8080/health
+curl --header 'Accept: application/yaml' http://127.0.0.1:8080/health
 ```
 
 The response body is exactly:
@@ -121,7 +123,9 @@ processes and temporary files are cleaned up when the test exits.
 - OpenAPI-discovered routes with literal and whole-segment parameter matching;
 - static-segment precedence and captured path parameters;
 - `GET /health`, books, and authors from the example contract;
-- central `400`, `404`, `405`, `413`, `415`, `500`, and `501` responses;
+- JSON and YAML response serialization with basic quality and wildcard
+  negotiation;
+- central `400`, `404`, `405`, `406`, `413`, `415`, `500`, and `501` responses;
 - operation-level `x-middlewares` with `requestId` and `logging`;
 - stable `X-Request-Id` correlation and one JSON request log on stderr;
 - `Connection: close` on every response.

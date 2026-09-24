@@ -1,0 +1,11 @@
+openapi: 3.0.3
+info:
+  title: Undocumented status fixture
+  version: 1.0.0
+paths:
+  /warning:
+    get:
+      operationId: status_warning
+      responses:
+        '200':
+          description: Documented status

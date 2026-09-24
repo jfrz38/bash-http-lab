@@ -10,6 +10,10 @@ paths:
       responses:
         '200':
           description: Runtime health
+          content:
+            application/json: {}
+            application/yaml: {}
+            text/yaml: {}
   /books:
     get:
       operationId: list_books
@@ -17,6 +21,10 @@ paths:
       responses:
         '200':
           description: Books in the example catalog
+          content:
+            application/json: {}
+            application/yaml: {}
+            text/yaml: {}
   /books/{bookId}:
     get:
       operationId: get_book
@@ -30,8 +38,16 @@ paths:
       responses:
         '200':
           description: One book
+          content:
+            application/json: {}
+            application/yaml: {}
+            text/yaml: {}
         '404':
           description: Book not found
+          content:
+            application/json: {}
+            application/yaml: {}
+            text/yaml: {}
   /authors:
     get:
       operationId: list_authors
@@ -39,6 +55,10 @@ paths:
       responses:
         '200':
           description: Authors in the example catalog
+          content:
+            application/json: {}
+            application/yaml: {}
+            text/yaml: {}
   /authors/{authorId}:
     get:
       operationId: get_author
@@ -52,5 +72,13 @@ paths:
       responses:
         '200':
           description: One author
+          content:
+            application/json: {}
+            application/yaml: {}
+            text/yaml: {}
         '404':
           description: Author not found
+          content:
+            application/json: {}
+            application/yaml: {}
+            text/yaml: {}

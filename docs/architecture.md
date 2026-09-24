@@ -16,7 +16,7 @@ TCP connection
     -> validation
     -> middleware
     -> handler execution
-    -> response construction
+    -> representation negotiation and response construction
     -> HTTP response
 ```
 
@@ -147,19 +147,21 @@ temporary interface.
 
 Dependency checks are command-specific:
 
-- `serve` requires Bash, `socat`, and Mike Farah `yq` v4. It also requires
-  `jq` when any operation selects `logging`.
+- `serve` requires Bash, `socat`, `jq`, and Mike Farah `yq` v4. Structured JSON
+  results are normalized with `jq`, and YAML responses are serialized with
+  `yq`.
 - `routes` and `validate` require Mike Farah `yq` v4 but not `socat`.
-- JSON request normalization requires `jq` only when a JSON body is received.
+- JSON request normalization also uses the runtime `jq` dependency when a JSON
+  body is received.
 - Request validation requires `jq` only for operations that declare supported
   parameter or body schemas.
 - Integration tests require `curl` and `socat`.
 - `make lint` requires `shellcheck`.
 - `make format` requires `shfmt`.
 
-The health endpoint does not depend on `jq`. OpenAPI commands and server
-startup require `yq`; a missing body parser produces an actionable error only
-when that representation is received.
+OpenAPI commands require `yq` but not `jq` or `socat`. Server startup checks all
+three runtime tools because any structured response can require JSON
+normalization or YAML serialization.
 
 ### Transport adapter
 
@@ -194,8 +196,9 @@ The connection entry point coordinates the request lifecycle:
 5. Validate declared parameters and request bodies.
 6. Run selected middleware before hooks in declaration order.
 7. Invoke the selected handler when appropriate and select the response status.
-8. Run applicable middleware after hooks in declaration order.
-9. Write exactly one response to stdout.
+8. Prepare the selected representation and run applicable middleware after
+   hooks in declaration order.
+9. Finalize and write exactly one response to stdout.
 10. Clean up temporary resources and exit.
 
 It may select a central error response after another component reports an
@@ -244,7 +247,8 @@ independent of handler loading.
 
 `openapi.sh` uses Mike Farah `yq` v4 to read the supported
 OpenAPI 3.0 subset. It converts document data into small internal route and
-validation representations. No other module should contain OpenAPI `yq`
+validation representations, including explicit response statuses by operation.
+No other module should contain OpenAPI `yq`
 queries; body normalization may use `yq` to parse a YAML representation.
 
 The adapter validates required structural rules before serving traffic. It
@@ -268,7 +272,8 @@ Handlers consume request context and use response helpers. They must not:
 - perform route matching;
 - calculate HTTP framing headers.
 
-The initial health handler returns a stable JSON body without requiring `jq`:
+The health handler returns this stable structured value, which the response
+builder normalizes with `jq` before JSON or YAML serialization:
 
 ```json
 {"status":"ok"}
@@ -276,8 +281,10 @@ The initial health handler returns a stable JSON body without requiring `jq`:
 
 ### Response builder
 
-The response builder is the sole owner of response serialization. It receives
-status, headers, and body state and emits:
+The response builder is the sole owner of representation selection and response
+serialization. Handlers provide a status and one structured JSON value. The
+builder normalizes that value, negotiates JSON or YAML from the parsed `Accept`
+header, and emits:
 
 ```text
 status line + headers + empty line + body
@@ -288,8 +295,11 @@ Phase 1. Content length is the byte length under a byte-oriented locale, not a
 character count. Error helpers select response data but still delegate final
 serialization to this module.
 
-Later content negotiation belongs in this boundary so handlers can continue to
-return a transport-neutral structured representation.
+Missing or empty `Accept` selects JSON. Supported exact ranges, type wildcards,
+the all-media wildcard, and `q` weights select `application/json`,
+`application/yaml`, or `text/yaml`. No match selects the central JSON `406`
+response. Raw response state remains available for explicitly textual internal
+responses, but application handlers use the structured contract.
 
 ### Validation and middleware
 
@@ -301,9 +311,10 @@ lifecycle before application code executes.
 
 Middleware is a synchronous, ordered pipeline selected per operation by the
 OpenAPI `x-middlewares` extension. Before hooks run after validation and before
-the handler; after hooks run after final handler status selection and before
-serialization. Phase 5 supports `requestId` and `logging`, does not expose an
-application short-circuit mechanism, and maps hook failures to a central `500`.
+the handler; after hooks run after representation negotiation has selected the
+final status, including `406`, and before the response is written. Phase 5
+supports `requestId` and `logging`, does not expose an application short-circuit
+mechanism, and maps hook failures to a central `500`.
 
 The request ID middleware preserves a client value matching
 `[A-Za-z0-9._-]{1,128}` or generates a Linux UUID. It exposes `REQUEST_ID` to
