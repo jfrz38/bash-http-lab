@@ -20,6 +20,12 @@ source "$ROOT_DIR/lib/errors.sh"
 source "$ROOT_DIR/lib/openapi.sh"
 # shellcheck source=../lib/validation.sh
 source "$ROOT_DIR/lib/validation.sh"
+# shellcheck source=../middleware/request-id.sh
+source "$ROOT_DIR/middleware/request-id.sh"
+# shellcheck source=../middleware/logging.sh
+source "$ROOT_DIR/middleware/logging.sh"
+# shellcheck source=../lib/middleware.sh
+source "$ROOT_DIR/lib/middleware.sh"
 # shellcheck source=../lib/router.sh
 source "$ROOT_DIR/lib/router.sh"
 # shellcheck source=../lib/server.sh
@@ -84,6 +90,9 @@ serve_command() {
 	if ! openapi_load_routes "$openapi_file"; then
 		printf '%s\n' "$OPENAPI_ERROR" >&2
 		return 1
+	fi
+	if [[ " ${OPENAPI_MIDDLEWARE_NAMES[*]} " == *' logging '* ]]; then
+		require_command jq || return 1
 	fi
 	require_command socat || return 1
 	start_server "$host" "$port" "$ROOT_DIR/bin/bash-http" "$openapi_file"

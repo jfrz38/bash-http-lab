@@ -16,9 +16,10 @@ start_server() {
 handle_connection() {
 	local openapi_file=$1
 	local handlers_dir=$2
-	local parse_status route_status params_status body_status validation_status handler_status
+	local parse_status route_status params_status body_status validation_status handler_status middleware_status
 
 	response_reset
+	middleware_reset
 	if ! openapi_load_routes "$openapi_file"; then
 		printf '%s\n' "$OPENAPI_ERROR" >&2
 		set_error_response 500
@@ -55,16 +56,25 @@ handle_connection() {
 					validation_status=$?
 					case $validation_status in
 					0)
-						invoke_route_handler "$handlers_dir" "$ROUTE_OPERATION_ID"
-						handler_status=$?
-						case $handler_status in
-						0) ;;
-						"$ROUTE_HANDLER_MISSING") set_error_response 501 ;;
-						*)
-							printf 'Handler failed for operation %s.\n' "$ROUTE_OPERATION_ID" >&2
+						middleware_run_before "$ROUTE_OPERATION_ID"
+						middleware_status=$?
+						if ((middleware_status == 0)); then
+							invoke_route_handler "$handlers_dir" "$ROUTE_OPERATION_ID"
+							handler_status=$?
+							case $handler_status in
+							0) ;;
+							"$ROUTE_HANDLER_MISSING") set_error_response 501 ;;
+							*)
+								printf 'Handler failed for operation %s.\n' "$ROUTE_OPERATION_ID" >&2
+								set_error_response 500
+								;;
+							esac
+						else
 							set_error_response 500
-							;;
-						esac
+						fi
+						if ! middleware_run_after "$ROUTE_OPERATION_ID"; then
+							set_error_response 500
+						fi
 						;;
 					"$VALIDATION_BAD_REQUEST") set_error_response 400 ;;
 					"$VALIDATION_UNSUPPORTED_MEDIA_TYPE") set_error_response 415 ;;
