@@ -74,19 +74,20 @@ silently use first-wins or last-wins behavior.
 
 ## Request bodies and framing
 
-Request bodies are outside Phase 1.
-
 - No `Content-Length` means the request has no body.
 - `Content-Length: 0` is accepted.
-- A valid positive `Content-Length` returns `501 Not Implemented`.
+- A valid positive `Content-Length` up to 1 MiB is read exactly.
+- A declared length over 1 MiB returns `413 Content Too Large`.
+- Premature EOF returns `400 Bad Request`.
 - An empty, signed, conflicting, or non-decimal content length returns
   `400 Bad Request`.
 - Any `Transfer-Encoding` header returns `501 Not Implemented`.
 - A request containing both `Content-Length` and `Transfer-Encoding` returns
   `400 Bad Request` because its framing is ambiguous for this runtime.
 
-Phase 3 will read exactly the declared number of bytes and will define behavior
-for premature EOF. Chunked encoding remains deferred.
+Chunked encoding remains deferred. Bodies are stored in private temporary
+files so Bash variables do not alter byte content; the files are removed after
+the request on success and failure.
 
 ## Phase 1 routes
 
@@ -146,6 +147,7 @@ The initial central status table includes:
 | --- | --- | --- |
 | 200 | OK | Successful health request. |
 | 400 | Bad Request | Invalid request syntax or framing. |
+| 413 | Content Too Large | Declared request body exceeds 1 MiB. |
 | 404 | Not Found | No matching path. |
 | 405 | Method Not Allowed | Known path with unsupported method. |
 | 415 | Unsupported Media Type | Introduced with request bodies. |
@@ -165,6 +167,7 @@ Phase 1 should enforce the following defaults:
 | Individual header line | 8 KiB |
 | Header count | 100 |
 | Total header bytes | 64 KiB |
+| Request body | 1 MiB |
 | Connection inactivity timeout | 10 seconds |
 
 Exceeding a syntactic size or count limit returns `400 Bad Request` when a
@@ -207,6 +210,36 @@ The bundled educational contract exposes `GET /health`, collection and detail
 routes for books, and collection and detail routes for authors. Its fixed
 responses demonstrate routing only; persistence and relationships between
 resources are not part of Phase 2.
+
+## Phase 3 request context
+
+Handlers consume three separate associative maps:
+
+- path parameters captured by the router, without percent decoding;
+- query parameters parsed from the raw query string;
+- lowercase header names with normalized surrounding whitespace.
+
+Query names and values decode `+` as a space and valid `%HH` octets. Decoded
+names are limited to ASCII letters, digits, `_`, `.`, `~`, and `-` so they are
+safe Bash associative-array keys. Empty or unsafe names, malformed escapes, NUL
+escapes, empty `&` segments, and repeated decoded names return `400 Bad
+Request`. Repeated headers remain rejected by the request parser, so no map
+silently applies first-wins or last-wins behavior.
+
+A non-empty body requires `Content-Type`. The media type is compared
+case-insensitively and may include parameters. Supported representations are:
+
+| Media type | Internal representation |
+| --- | --- |
+| `application/json` | Compact validated JSON file. |
+| `application/yaml`, `application/x-yaml` | JSON file converted by Mike Farah `yq` v4. |
+| `text/yaml`, `text/x-yaml` | JSON file converted by Mike Farah `yq` v4. |
+| `text/plain` | Byte-preserving text file. |
+
+Malformed JSON or YAML, an invalid media type, or a non-empty body without
+`Content-Type` returns `400 Bad Request` before the handler runs. A valid but
+unsupported media type returns `415 Unsupported Media Type`. `jq` is checked
+only when a JSON body needs normalization.
 
 ## Explicit non-goals
 

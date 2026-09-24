@@ -16,11 +16,10 @@ This directory is the source of truth for the project's technical direction:
 
 ## Current status
 
-The project has implemented **Phase 2: OpenAPI routing**. It provides the
-minimal HTTP runtime from Phase 1 and now validates OpenAPI 3.0 documents,
-discovers routes and operation IDs, captures path parameters, and resolves
-handlers safely. Request bodies and complete request context remain deferred to
-Phase 3.
+The project has implemented **Phase 3: Complete request context**. In addition
+to OpenAPI routing, handlers receive separate path, query, and header maps.
+Bounded `Content-Length` bodies support JSON, YAML, and plain text, with
+structured bodies normalized to JSON before handler execution.
 
 ## Fixed constraints
 
