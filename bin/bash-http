@@ -18,6 +18,8 @@ source "$ROOT_DIR/lib/response.sh"
 source "$ROOT_DIR/lib/errors.sh"
 # shellcheck source=../lib/openapi.sh
 source "$ROOT_DIR/lib/openapi.sh"
+# shellcheck source=../lib/validation.sh
+source "$ROOT_DIR/lib/validation.sh"
 # shellcheck source=../lib/router.sh
 source "$ROOT_DIR/lib/router.sh"
 # shellcheck source=../lib/server.sh

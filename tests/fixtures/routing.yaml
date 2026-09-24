@@ -4,6 +4,12 @@ info:
   version: 1.0.0
 paths:
   /items/{itemId}:
+    parameters:
+      - name: itemId
+        in: path
+        required: true
+        schema:
+          type: string
     get:
       operationId: get_item
       responses:
@@ -21,6 +27,17 @@ paths:
         '200':
           description: Special item
   /parents/{parentId}/items/{itemId}:
+    parameters:
+      - name: parentId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: itemId
+        in: path
+        required: true
+        schema:
+          type: string
     get:
       operationId: get_parent_item
       responses:
