@@ -6,7 +6,9 @@ request per connection, discovers routes from OpenAPI 3.0, builds a bounded
 request context, and validates a small OpenAPI request-schema subset before
 handlers run. Operations can also declare ordered request ID and structured
 logging middleware. Handlers return one structured JSON value that the response
-builder can serialize as JSON or YAML through `Accept` negotiation.
+builder can serialize as JSON or YAML through `Accept` negotiation. Developer
+commands can generate missing handlers or serve documented OpenAPI examples,
+and the included users API persists its demonstration data in a JSON file.
 
 This is an educational project. It is not production-ready and should not be
 exposed to untrusted networks.
@@ -60,7 +62,10 @@ With the server running:
 
 ```bash
 curl http://127.0.0.1:8080/health
-curl --header 'Accept: application/yaml' http://127.0.0.1:8080/health
+curl http://127.0.0.1:8080/users
+curl --request POST --header 'Content-Type: application/json' \
+  --data '{"name":"Katherine Johnson"}' http://127.0.0.1:8080/users
+curl --header 'Accept: application/yaml' http://127.0.0.1:8080/users/1
 ```
 
 The response body is exactly:
@@ -76,9 +81,25 @@ Inspect or validate the contract without starting the listener:
 ./bin/bash-http validate openapi.yaml
 ```
 
-The example contract also exposes `GET /books`, `GET /books/{bookId}`,
-`GET /authors`, and `GET /authors/{authorId}`. Its handlers use fixed data so
-the routing phase does not introduce persistence or joins.
+Generate only handlers that do not already exist, or run the same request
+pipeline using documented OpenAPI response examples instead of handlers:
+
+```bash
+./bin/bash-http generate openapi.yaml
+./bin/bash-http mock openapi.yaml
+```
+
+`generate` never overwrites an existing handler. Mock mode chooses the lowest
+documented `2xx` status with an example, falling back to the lowest documented
+status with an example. A direct `example` wins over named `examples`; named
+examples are considered in lexical order. External examples are unsupported.
+
+The example contract exposes health plus list, read, create, and delete user
+operations. User data is stored directly in `data/users.json`. Each update is
+written to a temporary file and renamed into place, so readers do not observe a
+partially written file. There is no locking or conflict detection: concurrent
+writes can allocate the same ID or overwrite one another. This intentionally
+primitive persistence is only suitable for the educational example.
 
 ## Development
 
@@ -122,7 +143,7 @@ processes and temporary files are cleaned up when the test exits.
   body type validation;
 - OpenAPI-discovered routes with literal and whole-segment parameter matching;
 - static-segment precedence and captured path parameters;
-- `GET /health`, books, and authors from the example contract;
+- health plus list, read, create, and delete users from the example contract;
 - JSON and YAML response serialization with basic quality and wildcard
   negotiation;
 - central `400`, `404`, `405`, `406`, `413`, `415`, `500`, and `501` responses;

@@ -9,6 +9,9 @@ declare -a OPENAPI_ROUTE_PATHS=()
 declare -a OPENAPI_ROUTE_OPERATION_IDS=()
 declare -a OPENAPI_RESPONSE_OPERATION_IDS=()
 declare -a OPENAPI_RESPONSE_STATUSES=()
+declare -a OPENAPI_RESPONSE_EXAMPLE_OPERATION_IDS=()
+declare -a OPENAPI_RESPONSE_EXAMPLE_STATUSES=()
+declare -a OPENAPI_RESPONSE_EXAMPLE_VALUES=()
 declare -a OPENAPI_PARAMETER_OPERATION_IDS=()
 declare -a OPENAPI_PARAMETER_NAMES=()
 declare -a OPENAPI_PARAMETER_LOCATIONS=()
@@ -23,6 +26,8 @@ declare -a OPENAPI_MIDDLEWARE_NAMES=()
 OPENAPI_ERROR=''
 OPENAPI_PATH_SIGNATURE=''
 OPENAPI_PARAMETER_KEY=''
+OPENAPI_MOCK_STATUS=''
+OPENAPI_MOCK_BODY=''
 
 openapi_reset() {
 	OPENAPI_ROUTE_METHODS=()
@@ -30,6 +35,9 @@ openapi_reset() {
 	OPENAPI_ROUTE_OPERATION_IDS=()
 	OPENAPI_RESPONSE_OPERATION_IDS=()
 	OPENAPI_RESPONSE_STATUSES=()
+	OPENAPI_RESPONSE_EXAMPLE_OPERATION_IDS=()
+	OPENAPI_RESPONSE_EXAMPLE_STATUSES=()
+	OPENAPI_RESPONSE_EXAMPLE_VALUES=()
 	OPENAPI_PARAMETER_OPERATION_IDS=()
 	OPENAPI_PARAMETER_NAMES=()
 	OPENAPI_PARAMETER_LOCATIONS=()
@@ -42,6 +50,74 @@ openapi_reset() {
 	OPENAPI_MIDDLEWARE_OPERATION_IDS=()
 	OPENAPI_MIDDLEWARE_NAMES=()
 	OPENAPI_ERROR=''
+	OPENAPI_MOCK_STATUS=''
+	OPENAPI_MOCK_BODY=''
+}
+
+openapi_load_response_example() {
+	local file=$1
+	local path=$2
+	local method=$3
+	local operation_id=$4
+	local status=$5
+	local context="$method $path response $status"
+	local content_tag media_type media_tag has_example examples_tag example_names example_name example_record example_tag value
+	local -a media_types=('application/json' 'application/yaml' 'text/yaml')
+
+	content_tag=$(OPENAPI_PATH=$path OPENAPI_KEY=$method OPENAPI_STATUS=$status yq eval '.paths[strenv(OPENAPI_PATH)][strenv(OPENAPI_KEY)].responses[strenv(OPENAPI_STATUS)].content | tag' "$file" </dev/null 2>/dev/null) || return "$OPENAPI_INVALID"
+	[[ $content_tag != '!!null' ]] || return 0
+	if [[ $content_tag != '!!map' ]]; then
+		openapi_fail "Response content in $context must be a mapping." "$OPENAPI_INVALID"
+		return
+	fi
+
+	for media_type in "${media_types[@]}"; do
+		media_tag=$(OPENAPI_PATH=$path OPENAPI_KEY=$method OPENAPI_STATUS=$status OPENAPI_MEDIA=$media_type yq eval '.paths[strenv(OPENAPI_PATH)][strenv(OPENAPI_KEY)].responses[strenv(OPENAPI_STATUS)].content[strenv(OPENAPI_MEDIA)] | tag' "$file" </dev/null 2>/dev/null) || return "$OPENAPI_INVALID"
+		[[ $media_tag != '!!null' ]] || continue
+		if [[ $media_tag != '!!map' ]]; then
+			openapi_fail "Response media type '$media_type' in $context must be a mapping." "$OPENAPI_INVALID"
+			return
+		fi
+
+		has_example=$(OPENAPI_PATH=$path OPENAPI_KEY=$method OPENAPI_STATUS=$status OPENAPI_MEDIA=$media_type yq eval '.paths[strenv(OPENAPI_PATH)][strenv(OPENAPI_KEY)].responses[strenv(OPENAPI_STATUS)].content[strenv(OPENAPI_MEDIA)] | has("example")' "$file" </dev/null 2>/dev/null) || return "$OPENAPI_INVALID"
+		if [[ $has_example == 'true' ]]; then
+			value=$(OPENAPI_PATH=$path OPENAPI_KEY=$method OPENAPI_STATUS=$status OPENAPI_MEDIA=$media_type yq eval --output-format=json --indent=0 '.paths[strenv(OPENAPI_PATH)][strenv(OPENAPI_KEY)].responses[strenv(OPENAPI_STATUS)].content[strenv(OPENAPI_MEDIA)].example' "$file" </dev/null 2>/dev/null) || return "$OPENAPI_INVALID"
+			OPENAPI_RESPONSE_EXAMPLE_OPERATION_IDS+=("$operation_id")
+			OPENAPI_RESPONSE_EXAMPLE_STATUSES+=("$status")
+			OPENAPI_RESPONSE_EXAMPLE_VALUES+=("$value")
+			return 0
+		fi
+
+		examples_tag=$(OPENAPI_PATH=$path OPENAPI_KEY=$method OPENAPI_STATUS=$status OPENAPI_MEDIA=$media_type yq eval '.paths[strenv(OPENAPI_PATH)][strenv(OPENAPI_KEY)].responses[strenv(OPENAPI_STATUS)].content[strenv(OPENAPI_MEDIA)].examples | tag' "$file" </dev/null 2>/dev/null) || return "$OPENAPI_INVALID"
+		[[ $examples_tag != '!!null' ]] || continue
+		if [[ $examples_tag != '!!map' ]]; then
+			openapi_fail "Response examples for '$media_type' in $context must be a mapping." "$OPENAPI_INVALID"
+			return
+		fi
+		example_names=$(OPENAPI_PATH=$path OPENAPI_KEY=$method OPENAPI_STATUS=$status OPENAPI_MEDIA=$media_type yq eval '.paths[strenv(OPENAPI_PATH)][strenv(OPENAPI_KEY)].responses[strenv(OPENAPI_STATUS)].content[strenv(OPENAPI_MEDIA)].examples | keys | sort | .[]' "$file" </dev/null 2>/dev/null) || return "$OPENAPI_INVALID"
+		while IFS= read -r example_name; do
+			[[ -n $example_name ]] || continue
+			example_record=$(OPENAPI_PATH=$path OPENAPI_KEY=$method OPENAPI_STATUS=$status OPENAPI_MEDIA=$media_type OPENAPI_EXAMPLE=$example_name yq eval --output-format=json --indent=0 '.paths[strenv(OPENAPI_PATH)][strenv(OPENAPI_KEY)].responses[strenv(OPENAPI_STATUS)].content[strenv(OPENAPI_MEDIA)].examples[strenv(OPENAPI_EXAMPLE)]' "$file" </dev/null 2>/dev/null) || return "$OPENAPI_INVALID"
+			example_tag=$(yq eval 'tag' - <<<"$example_record" 2>/dev/null) || return "$OPENAPI_INVALID"
+			if [[ $example_tag != '!!map' ]]; then
+				openapi_fail "Response example '$example_name' in $context must be a mapping." "$OPENAPI_INVALID"
+				return
+			fi
+			if [[ $(yq eval 'has("externalValue")' - <<<"$example_record" 2>/dev/null) == 'true' ]]; then
+				openapi_fail "External response example '$example_name' in $context is not supported." "$OPENAPI_UNSUPPORTED"
+				return
+			fi
+			if [[ $(yq eval 'has("value")' - <<<"$example_record" 2>/dev/null) != 'true' ]]; then
+				openapi_fail "Response example '$example_name' in $context must define value." "$OPENAPI_INVALID"
+				return
+			fi
+			value=$(yq eval --output-format=json --indent=0 '.value' - <<<"$example_record" 2>/dev/null) || return "$OPENAPI_INVALID"
+			OPENAPI_RESPONSE_EXAMPLE_OPERATION_IDS+=("$operation_id")
+			OPENAPI_RESPONSE_EXAMPLE_STATUSES+=("$status")
+			OPENAPI_RESPONSE_EXAMPLE_VALUES+=("$value")
+			return 0
+		done <<<"$example_names"
+	done
 }
 
 openapi_load_responses() {
@@ -66,6 +142,7 @@ openapi_load_responses() {
 		fi
 		OPENAPI_RESPONSE_OPERATION_IDS+=("$operation_id")
 		OPENAPI_RESPONSE_STATUSES+=("$status")
+		openapi_load_response_example "$file" "$path" "$method" "$operation_id" "$status" || return $?
 	done <<<"$response_records"
 }
 
@@ -80,6 +157,36 @@ openapi_response_status_is_documented() {
 		fi
 	done
 	return 1
+}
+
+openapi_select_mock_response() {
+	local operation_id=$1
+	local index status selected_index=-1 selected_status=600
+
+	OPENAPI_MOCK_STATUS=''
+	OPENAPI_MOCK_BODY=''
+	for ((index = 0; index < ${#OPENAPI_RESPONSE_EXAMPLE_OPERATION_IDS[@]}; index += 1)); do
+		[[ ${OPENAPI_RESPONSE_EXAMPLE_OPERATION_IDS[$index]} == "$operation_id" ]] || continue
+		status=${OPENAPI_RESPONSE_EXAMPLE_STATUSES[$index]}
+		if [[ $status == 2* ]] && ((10#$status < selected_status)); then
+			selected_index=$index
+			selected_status=$((10#$status))
+		fi
+	done
+	if ((selected_index < 0)); then
+		selected_status=600
+		for ((index = 0; index < ${#OPENAPI_RESPONSE_EXAMPLE_OPERATION_IDS[@]}; index += 1)); do
+			[[ ${OPENAPI_RESPONSE_EXAMPLE_OPERATION_IDS[$index]} == "$operation_id" ]] || continue
+			status=${OPENAPI_RESPONSE_EXAMPLE_STATUSES[$index]}
+			if ((10#$status < selected_status)); then
+				selected_index=$index
+				selected_status=$((10#$status))
+			fi
+		done
+	fi
+	((selected_index >= 0)) || return 1
+	OPENAPI_MOCK_STATUS=${OPENAPI_RESPONSE_EXAMPLE_STATUSES[$selected_index]}
+	OPENAPI_MOCK_BODY=${OPENAPI_RESPONSE_EXAMPLE_VALUES[$selected_index]}
 }
 
 openapi_load_middlewares() {

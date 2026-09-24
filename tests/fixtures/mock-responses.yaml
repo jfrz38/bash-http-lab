@@ -1,0 +1,47 @@
+openapi: 3.0.3
+info:
+  title: Mock response fixture
+  version: 1.0.0
+paths:
+  /direct:
+    get:
+      operationId: mock_direct
+      responses:
+        '201':
+          description: Later success
+          content:
+            application/json:
+              example: {selected: false}
+        '200':
+          description: First success
+          content:
+            application/json:
+              example: {selected: true}
+  /named:
+    get:
+      operationId: mock_named
+      responses:
+        '200':
+          description: Named examples
+          content:
+            application/json:
+              examples:
+                beta:
+                  value: {name: beta}
+                alpha:
+                  value: {name: alpha}
+  /error-only:
+    get:
+      operationId: mock_error
+      responses:
+        '404':
+          description: Only documented example
+          content:
+            application/json:
+              example: {error: missing}
+  /missing:
+    get:
+      operationId: mock_missing
+      responses:
+        '200':
+          description: No example

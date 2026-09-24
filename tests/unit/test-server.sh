@@ -36,8 +36,9 @@ request_connection() {
 	local output_file
 	local openapi_file=${2:-$ROOT_DIR/openapi.yaml}
 	local handlers_dir=${3:-$ROOT_DIR/handlers}
+	local server_mode=${4:-serve}
 	output_file=$(mktemp)
-	handle_connection "$openapi_file" "$handlers_dir" <<<"$1" >"$output_file" 2>"$output_file.stderr"
+	handle_connection "$openapi_file" "$handlers_dir" "$server_mode" <<<"$1" >"$output_file" 2>"$output_file.stderr"
 	CONNECTION_RESPONSE=$(<"$output_file")
 	CONNECTION_STDERR=$(<"$output_file.stderr")
 	rm -f "$output_file" "$output_file.stderr"
@@ -58,12 +59,43 @@ test_health_query_route() {
 	assert_contains "$actual" 'HTTP/1.1 200 OK'
 }
 
-test_books_route() {
+test_users_route() {
 	local actual
-	request_connection $'GET /books/1 HTTP/1.1\r\n\r'
+	request_connection $'GET /users/1 HTTP/1.1\r\n\r'
 	actual=$CONNECTION_RESPONSE
 	assert_contains "$actual" 'HTTP/1.1 200 OK'
-	assert_contains "$actual" 'The Left Hand of Darkness'
+	assert_contains "$actual" 'Ada Lovelace'
+}
+
+test_creates_and_deletes_user() {
+	local users_file
+	users_file=$(mktemp)
+	cp "$ROOT_DIR/data/users.json" "$users_file"
+	BASH_HTTP_USERS_FILE=$users_file request_connection $'POST /users HTTP/1.1\r\nContent-Length: 20\r\nContent-Type: application/json\r\n\r\n{"name":"Katherine"}'
+	assert_contains "$CONNECTION_RESPONSE" 'HTTP/1.1 201 Created'
+	assert_contains "$CONNECTION_RESPONSE" '"id":3'
+	BASH_HTTP_USERS_FILE=$users_file request_connection $'GET /users/3 HTTP/1.1\r\n\r'
+	assert_contains "$CONNECTION_RESPONSE" 'Katherine'
+	BASH_HTTP_USERS_FILE=$users_file request_connection $'DELETE /users/3 HTTP/1.1\r\n\r'
+	assert_contains "$CONNECTION_RESPONSE" '"deleted":true'
+	BASH_HTTP_USERS_FILE=$users_file request_connection $'GET /users/3 HTTP/1.1\r\n\r'
+	assert_contains "$CONNECTION_RESPONSE" 'HTTP/1.1 404 Not Found'
+	rm -f "$users_file"
+}
+
+test_mocks_documented_example_without_handler() {
+	local empty_handlers
+	empty_handlers=$(mktemp -d)
+	request_connection $'GET /users HTTP/1.1\r\nAccept: application/yaml\r\n\r' "$ROOT_DIR/openapi.yaml" "$empty_handlers" mock
+	rm -rf "$empty_handlers"
+	assert_contains "$CONNECTION_RESPONSE" 'HTTP/1.1 200 OK'
+	assert_contains "$CONNECTION_RESPONSE" $'Content-Type: application/yaml\r\n'
+	assert_contains "$CONNECTION_RESPONSE" 'Ada Lovelace'
+}
+
+test_mock_without_example_returns_not_implemented() {
+	request_connection $'GET /missing HTTP/1.1\r\n\r' "$ROOT_DIR/tests/fixtures/mock-responses.yaml" "$ROOT_DIR/handlers" mock
+	assert_contains "$CONNECTION_RESPONSE" 'HTTP/1.1 501 Not Implemented'
 }
 
 test_negotiates_yaml_response() {
@@ -202,7 +234,10 @@ test_oversized_body() {
 
 run_test 'routes GET /health' test_health_route
 run_test 'ignores the query string for routing' test_health_query_route
-run_test 'routes a captured book identifier' test_books_route
+run_test 'routes a captured user identifier' test_users_route
+run_test 'persists create and delete user operations' test_creates_and_deletes_user
+run_test 'serves a negotiated documented example in mock mode' test_mocks_documented_example_without_handler
+run_test 'returns 501 when mock mode has no documented example' test_mock_without_example_returns_not_implemented
 run_test 'negotiates a YAML representation' test_negotiates_yaml_response
 run_test 'returns 406 and logs the negotiated status' test_returns_not_acceptable_and_logs_final_status
 run_test 'warns when a handler status is not documented' test_warns_for_undocumented_handler_status

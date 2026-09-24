@@ -391,10 +391,33 @@ errors participate in negotiation, except `406` itself. OpenAPI loading records
 explicit response status codes and warns when a handler selects an undocumented
 one, but response-schema validation and `default` responses remain deferred.
 
+## D025: Keep Phase 7 tooling deterministic and persistence primitive
+
+**Status:** Accepted for Phase 7
+
+Handler generation creates only missing files and offers no force option. Mock
+mode uses documented response examples as the handler result while preserving
+the normal routing, validation, middleware, negotiation, and serialization
+pipeline. It chooses the lowest `2xx` example status, or otherwise the lowest
+example status; direct examples precede lexically ordered named examples, and
+external examples are rejected.
+
+The users API stores one JSON array in `data/users.json`. Writes use a temporary
+file in the same directory followed by rename, without a repository layer,
+locking, versioning, or conflict detection.
+
+**Rationale:** These rules make developer output reproducible and demonstrate
+the stable runtime seams without creating a second router or speculative
+persistence abstraction.
+
+**Consequences:** Generation cannot intentionally replace a handler. Mocking
+requires an inline documented example. Concurrent user writes can allocate the
+same ID or overwrite each other even though individual file replacement is
+atomic.
+
 ## Deferred decisions
 
 The following decisions should be made when their implementation phase begins:
 
-- persistence concurrency for the example users file;
-- generated handler formatting and overwrite policy flags;
-- mock response selection when multiple examples or status codes exist.
+- persistence concurrency controls beyond documenting the example's limits;
+- response schemas and external OpenAPI examples.

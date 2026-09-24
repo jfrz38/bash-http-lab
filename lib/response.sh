@@ -42,6 +42,7 @@ response_add_header() {
 response_reason_phrase() {
 	case $1 in
 	200) REASON_PHRASE='OK' ;;
+	201) REASON_PHRASE='Created' ;;
 	400) REASON_PHRASE='Bad Request' ;;
 	404) REASON_PHRASE='Not Found' ;;
 	405) REASON_PHRASE='Method Not Allowed' ;;

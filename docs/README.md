@@ -16,11 +16,11 @@ This directory is the source of truth for the project's technical direction:
 
 ## Current status
 
-The project has implemented **Phase 6: Representation and content
-negotiation**. Handlers return one structured JSON value, while the response
-builder selects JSON or YAML from `Accept`. Unsupported response media produce
-`406`, and handler statuses missing from the OpenAPI operation produce a
-development warning on stderr.
+The project has implemented **Phase 7: Developer tooling and example API**.
+The CLI can generate missing handlers without overwriting files and can serve
+documented response examples through the normal request pipeline. The example
+users API exercises routing, validation, middleware, representation negotiation,
+and intentionally primitive JSON-file persistence.
 
 ## Fixed constraints
 

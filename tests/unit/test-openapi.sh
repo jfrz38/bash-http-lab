@@ -8,28 +8,50 @@ source "$ROOT_DIR/tests/test-helper.sh"
 # shellcheck source=../../lib/openapi.sh
 source "$ROOT_DIR/lib/openapi.sh"
 
-test_loads_catalog_routes() {
+test_loads_users_routes_and_examples() {
 	local status
 	openapi_load_routes "$ROOT_DIR/openapi.yaml"
 	status=$?
-	assert_equal '0' "$status" "$OPENAPI_ERROR"
+	assert_equal '0' "$status" "$OPENAPI_ERROR" || return
 	((status == 0)) || return
-	assert_equal '5' "${#OPENAPI_ROUTE_METHODS[@]}"
-	assert_equal 'health' "${OPENAPI_ROUTE_OPERATION_IDS[0]}"
-	assert_equal 'get_author' "${OPENAPI_ROUTE_OPERATION_IDS[4]}"
-	assert_equal '2' "${#OPENAPI_PARAMETER_OPERATION_IDS[@]}"
-	assert_equal 'bookId' "${OPENAPI_PARAMETER_NAMES[0]}"
-	assert_equal '{"type":"string"}' "${OPENAPI_PARAMETER_SCHEMAS[0]}"
-	assert_equal '10' "${#OPENAPI_MIDDLEWARE_NAMES[@]}"
-	assert_equal 'requestId' "${OPENAPI_MIDDLEWARE_NAMES[0]}"
-	assert_equal 'logging' "${OPENAPI_MIDDLEWARE_NAMES[1]}"
-	assert_equal '7' "${#OPENAPI_RESPONSE_STATUSES[@]}"
-	assert_equal '200' "${OPENAPI_RESPONSE_STATUSES[0]}"
-	assert_equal '404' "${OPENAPI_RESPONSE_STATUSES[3]}"
-	openapi_response_status_is_documented 'get_book' 404 || fail 'expected get_book 404 to be documented'
+	assert_equal '5' "${#OPENAPI_ROUTE_METHODS[@]}" || return
+	assert_equal 'health' "${OPENAPI_ROUTE_OPERATION_IDS[0]}" || return
+	assert_equal 'get_user' "${OPENAPI_ROUTE_OPERATION_IDS[3]}" || return
+	assert_equal '2' "${#OPENAPI_PARAMETER_OPERATION_IDS[@]}" || return
+	assert_equal 'userId' "${OPENAPI_PARAMETER_NAMES[0]}" || return
+	assert_equal '{"type":"integer","minimum":1}' "${OPENAPI_PARAMETER_SCHEMAS[0]}" || return
+	assert_equal '10' "${#OPENAPI_MIDDLEWARE_NAMES[@]}" || return
+	assert_equal 'requestId' "${OPENAPI_MIDDLEWARE_NAMES[0]}" || return
+	assert_equal 'logging' "${OPENAPI_MIDDLEWARE_NAMES[1]}" || return
+	assert_equal '7' "${#OPENAPI_RESPONSE_STATUSES[@]}" || return
+	assert_equal '200' "${OPENAPI_RESPONSE_STATUSES[0]}" || return
+	assert_equal '7' "${#OPENAPI_RESPONSE_EXAMPLE_VALUES[@]}" || return
+	openapi_response_status_is_documented 'get_user' 404 || return 1
 	if openapi_response_status_is_documented 'health' 404; then
-		fail 'expected health 404 to be undocumented'
+		return 1
 	fi
+}
+
+test_selects_mock_examples_deterministically() {
+	openapi_load_routes "$ROOT_DIR/tests/fixtures/mock-responses.yaml" || return
+	openapi_select_mock_response mock_direct || return 1
+	assert_equal '200' "$OPENAPI_MOCK_STATUS" || return
+	assert_equal '{"selected":true}' "$OPENAPI_MOCK_BODY" || return
+	openapi_select_mock_response mock_named || return 1
+	assert_equal '{"name":"alpha"}' "$OPENAPI_MOCK_BODY" || return
+	openapi_select_mock_response mock_error || return 1
+	assert_equal '404' "$OPENAPI_MOCK_STATUS" || return
+	if openapi_select_mock_response mock_missing; then
+		return 1
+	fi
+}
+
+test_rejects_external_response_examples() {
+	local status
+	openapi_load_routes "$ROOT_DIR/tests/fixtures/external-response-example.yaml"
+	status=$?
+	assert_equal "$OPENAPI_UNSUPPORTED" "$status"
+	assert_contains "$OPENAPI_ERROR" 'External response example'
 }
 
 test_rejects_unsupported_response_status() {
@@ -120,7 +142,9 @@ test_requires_path_parameter_declarations() {
 	assert_contains "$OPENAPI_ERROR" "Path parameter 'itemId' is not declared"
 }
 
-run_test 'loads routes from the catalog contract' test_loads_catalog_routes
+run_test 'loads routes and response examples from the users contract' test_loads_users_routes_and_examples
+run_test 'selects mock examples deterministically' test_selects_mock_examples_deterministically
+run_test 'rejects external response examples' test_rejects_external_response_examples
 run_test 'rejects ambiguous path templates' test_rejects_ambiguous_paths
 run_test 'rejects duplicate operation IDs' test_rejects_duplicate_operation_ids
 run_test 'rejects unsafe operation IDs' test_rejects_unsafe_operation_id
