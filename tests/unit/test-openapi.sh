@@ -20,6 +20,33 @@ test_loads_catalog_routes() {
 	assert_equal '2' "${#OPENAPI_PARAMETER_OPERATION_IDS[@]}"
 	assert_equal 'bookId' "${OPENAPI_PARAMETER_NAMES[0]}"
 	assert_equal '{"type":"string"}' "${OPENAPI_PARAMETER_SCHEMAS[0]}"
+	assert_equal '10' "${#OPENAPI_MIDDLEWARE_NAMES[@]}"
+	assert_equal 'requestId' "${OPENAPI_MIDDLEWARE_NAMES[0]}"
+	assert_equal 'logging' "${OPENAPI_MIDDLEWARE_NAMES[1]}"
+}
+
+test_rejects_unknown_middleware() {
+	local status
+	openapi_load_routes "$ROOT_DIR/tests/fixtures/unknown-middleware.yaml"
+	status=$?
+	assert_equal "$OPENAPI_UNSUPPORTED" "$status"
+	assert_contains "$OPENAPI_ERROR" "Unknown middleware 'compression'"
+}
+
+test_rejects_duplicate_middleware() {
+	local status
+	openapi_load_routes "$ROOT_DIR/tests/fixtures/duplicate-middleware.yaml"
+	status=$?
+	assert_equal "$OPENAPI_INVALID" "$status"
+	assert_contains "$OPENAPI_ERROR" "Duplicate middleware 'requestId'"
+}
+
+test_rejects_malformed_middleware_list() {
+	local status
+	openapi_load_routes "$ROOT_DIR/tests/fixtures/malformed-middlewares.yaml"
+	status=$?
+	assert_equal "$OPENAPI_INVALID" "$status"
+	assert_contains "$OPENAPI_ERROR" 'x-middlewares in get /health must be a sequence'
 }
 
 test_rejects_ambiguous_paths() {
@@ -77,4 +104,7 @@ run_test 'rejects unsafe operation IDs' test_rejects_unsafe_operation_id
 run_test 'rejects OpenAPI 3.1' test_rejects_unsupported_version
 run_test 'rejects unsupported correctness-affecting schema keywords' test_rejects_unsupported_schema_keyword
 run_test 'requires every template parameter to be declared' test_requires_path_parameter_declarations
+run_test 'rejects unknown middleware' test_rejects_unknown_middleware
+run_test 'rejects duplicate middleware declarations' test_rejects_duplicate_middleware
+run_test 'requires middleware declarations to be a sequence' test_rejects_malformed_middleware_list
 finish_tests

@@ -21,6 +21,12 @@ source "$ROOT_DIR/lib/errors.sh"
 source "$ROOT_DIR/lib/openapi.sh"
 # shellcheck source=../../lib/validation.sh
 source "$ROOT_DIR/lib/validation.sh"
+# shellcheck source=../../middleware/request-id.sh
+source "$ROOT_DIR/middleware/request-id.sh"
+# shellcheck source=../../middleware/logging.sh
+source "$ROOT_DIR/middleware/logging.sh"
+# shellcheck source=../../lib/middleware.sh
+source "$ROOT_DIR/lib/middleware.sh"
 # shellcheck source=../../lib/router.sh
 source "$ROOT_DIR/lib/router.sh"
 # shellcheck source=../../lib/server.sh
@@ -31,9 +37,10 @@ request_connection() {
 	local openapi_file=${2:-$ROOT_DIR/openapi.yaml}
 	local handlers_dir=${3:-$ROOT_DIR/handlers}
 	output_file=$(mktemp)
-	handle_connection "$openapi_file" "$handlers_dir" <<<"$1" >"$output_file"
+	handle_connection "$openapi_file" "$handlers_dir" <<<"$1" >"$output_file" 2>"$output_file.stderr"
 	CONNECTION_RESPONSE=$(<"$output_file")
-	rm -f "$output_file"
+	CONNECTION_STDERR=$(<"$output_file.stderr")
+	rm -f "$output_file" "$output_file.stderr"
 }
 
 test_health_route() {
@@ -76,9 +83,12 @@ test_unsupported_health_method() {
 
 test_missing_handler() {
 	local actual
-	request_connection $'GET /items/special HTTP/1.1\r\n\r' "$ROOT_DIR/tests/fixtures/routing.yaml"
+	request_connection $'GET /items/special HTTP/1.1\r\nX-Request-Id: missing-handler\r\n\r' "$ROOT_DIR/tests/fixtures/routing.yaml"
 	actual=$CONNECTION_RESPONSE
 	assert_contains "$actual" 'HTTP/1.1 501 Not Implemented'
+	assert_contains "$actual" 'X-Request-Id: missing-handler'
+	assert_equal 'missing-handler' "$(jq --raw-output '.requestId' <<<"$CONNECTION_STDERR")"
+	assert_equal '501' "$(jq --raw-output '.status' <<<"$CONNECTION_STDERR")"
 }
 
 test_malformed_request() {
@@ -91,12 +101,15 @@ test_malformed_request() {
 test_request_context_reaches_handler() {
 	local actual
 	request_connection \
-		$'POST /context/42?q=left+hand HTTP/1.1\r\nContent-Length: 14\r\nContent-Type: application/json\r\nX-Trace: abc\r\n\r\n{"name":"Ada"}' \
+		$'POST /context/42?q=left+hand HTTP/1.1\r\nContent-Length: 14\r\nContent-Type: application/json\r\nX-Trace: abc\r\nX-Request-Id: client-42\r\n\r\n{"name":"Ada"}' \
 		"$ROOT_DIR/tests/fixtures/request-context.yaml" \
 		"$ROOT_DIR/tests/fixtures/handlers"
 	actual=$CONNECTION_RESPONSE
 	assert_contains "$actual" 'HTTP/1.1 200 OK'
-	assert_contains "$actual" '{"path":"42","query":"left hand","header":"abc","body":{"name":"Ada"}}'
+	assert_contains "$actual" 'X-Request-Id: client-42'
+	assert_contains "$actual" '{"path":"42","query":"left hand","header":"abc","requestId":"client-42","body":{"name":"Ada"}}'
+	assert_equal 'client-42' "$(jq --raw-output '.requestId' <<<"$CONNECTION_STDERR")"
+	assert_equal '200' "$(jq --raw-output '.status' <<<"$CONNECTION_STDERR")"
 }
 
 test_invalid_query_is_bad_request() {
@@ -107,6 +120,7 @@ test_invalid_query_is_bad_request() {
 		"$ROOT_DIR/tests/fixtures/handlers"
 	actual=$CONNECTION_RESPONSE
 	assert_contains "$actual" 'HTTP/1.1 400 Bad Request'
+	assert_equal '' "$CONNECTION_STDERR"
 }
 
 test_invalid_openapi_parameter_is_bad_request() {
