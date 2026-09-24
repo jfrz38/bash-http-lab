@@ -1,0 +1,10 @@
+openapi: 3.0.3
+info:
+  title: Malformed response fixture
+  version: 1.0.0
+paths:
+  /health:
+    get:
+      operationId: health
+      responses:
+        '200': invalid

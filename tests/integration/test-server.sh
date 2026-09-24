@@ -9,6 +9,7 @@ source "$ROOT_DIR/tests/test-helper.sh"
 TEST_HOST=${TEST_HOST:-127.0.0.1}
 TEST_PORT=${TEST_PORT:-18080}
 TEST_BASE_URL="http://${TEST_HOST}:${TEST_PORT}"
+TEST_REQUEST_TIMEOUT_SECONDS=${TEST_REQUEST_TIMEOUT_SECONDS:-5}
 TEST_TMP_DIR=$(mktemp -d)
 SERVER_PID=''
 
@@ -31,7 +32,7 @@ start_test_server() {
 
 	local attempt
 	for ((attempt = 1; attempt <= 50; attempt += 1)); do
-		if curl --silent --max-time 1 "$TEST_BASE_URL/health" >/dev/null 2>&1; then
+		if curl --silent --max-time "$TEST_REQUEST_TIMEOUT_SECONDS" "$TEST_BASE_URL/health" >/dev/null 2>&1; then
 			return 0
 		fi
 		if ! kill -0 "$SERVER_PID" 2>/dev/null; then
@@ -58,21 +59,45 @@ perform_request() {
 	local method=$1
 	local path=$2
 	local request_id=${3:-}
-	local -a request_id_option=()
+	local accept=${4:-}
+	local -a request_id_option=() accept_option=()
 
 	if [[ -n $request_id ]]; then
 		request_id_option=(--header "X-Request-Id: $request_id")
 	fi
+	if [[ -n $accept ]]; then
+		accept_option=(--header "Accept: $accept")
+	fi
 
-	HTTP_STATUS=$(curl --silent --show-error --max-time 2 --http1.1 \
+	HTTP_STATUS=$(curl --silent --show-error --max-time "$TEST_REQUEST_TIMEOUT_SECONDS" --http1.1 \
 		--request "$method" \
 		"${request_id_option[@]}" \
+		"${accept_option[@]}" \
 		--dump-header "$TEST_TMP_DIR/headers" \
 		--output "$TEST_TMP_DIR/body" \
 		--write-out '%{http_code}' \
 		"$TEST_BASE_URL$path")
 	RESPONSE_HEADERS=$(<"$TEST_TMP_DIR/headers")
 	RESPONSE_BODY=$(<"$TEST_TMP_DIR/body")
+}
+
+test_yaml_response() {
+	perform_request GET '/health' '' 'text/yaml'
+	assert_equal '200' "$HTTP_STATUS"
+	assert_contains "$RESPONSE_HEADERS" $'Content-Type: text/yaml\r'
+	assert_equal 'status: ok' "$RESPONSE_BODY"
+}
+
+test_accept_quality_prefers_yaml() {
+	perform_request GET '/health' '' 'application/json;q=0.2, application/*;q=0.8'
+	assert_equal '200' "$HTTP_STATUS"
+	assert_contains "$RESPONSE_HEADERS" $'Content-Type: application/yaml\r'
+}
+
+test_rejects_unsupported_response_media_type() {
+	perform_request GET '/health' '' 'image/png'
+	assert_equal '406' "$HTTP_STATUS"
+	assert_equal '{"error":"Not Acceptable"}' "$RESPONSE_BODY"
 }
 
 test_request_id_and_log_correlation() {
@@ -92,7 +117,7 @@ perform_body_request() {
 	local body=$2
 	local path=${3:-/body}
 
-	HTTP_STATUS=$(curl --silent --show-error --max-time 2 --http1.1 \
+	HTTP_STATUS=$(curl --silent --show-error --max-time "$TEST_REQUEST_TIMEOUT_SECONDS" --http1.1 \
 		--request POST \
 		--header "Content-Type: $content_type" \
 		--data-binary "$body" \
@@ -106,7 +131,7 @@ perform_body_request() {
 
 perform_raw_request() {
 	local request=$1
-	printf '%s' "$request" | socat - "TCP:${TEST_HOST}:${TEST_PORT}" >"$TEST_TMP_DIR/raw-response"
+	printf '%s' "$request" | socat -t "$TEST_REQUEST_TIMEOUT_SECONDS" - "TCP:${TEST_HOST}:${TEST_PORT}" >"$TEST_TMP_DIR/raw-response"
 	RAW_RESPONSE=$(<"$TEST_TMP_DIR/raw-response")
 }
 
@@ -186,6 +211,9 @@ test_rejects_premature_body_eof() {
 
 start_test_server
 run_test 'serves the exact health response' test_health_response
+run_test 'serializes a structured result as YAML' test_yaml_response
+run_test 'honors Accept quality and wildcard preferences' test_accept_quality_prefers_yaml
+run_test 'returns 406 for unsupported response media' test_rejects_unsupported_response_media_type
 run_test 'routes health requests with a query string' test_health_query_response
 run_test 'routes a captured book identifier' test_book_response
 run_test 'returns 404 for an unknown path' test_unknown_path_response

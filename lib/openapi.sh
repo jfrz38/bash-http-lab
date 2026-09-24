@@ -7,6 +7,8 @@ readonly OPENAPI_UNSUPPORTED=21
 declare -a OPENAPI_ROUTE_METHODS=()
 declare -a OPENAPI_ROUTE_PATHS=()
 declare -a OPENAPI_ROUTE_OPERATION_IDS=()
+declare -a OPENAPI_RESPONSE_OPERATION_IDS=()
+declare -a OPENAPI_RESPONSE_STATUSES=()
 declare -a OPENAPI_PARAMETER_OPERATION_IDS=()
 declare -a OPENAPI_PARAMETER_NAMES=()
 declare -a OPENAPI_PARAMETER_LOCATIONS=()
@@ -26,6 +28,8 @@ openapi_reset() {
 	OPENAPI_ROUTE_METHODS=()
 	OPENAPI_ROUTE_PATHS=()
 	OPENAPI_ROUTE_OPERATION_IDS=()
+	OPENAPI_RESPONSE_OPERATION_IDS=()
+	OPENAPI_RESPONSE_STATUSES=()
 	OPENAPI_PARAMETER_OPERATION_IDS=()
 	OPENAPI_PARAMETER_NAMES=()
 	OPENAPI_PARAMETER_LOCATIONS=()
@@ -38,6 +42,44 @@ openapi_reset() {
 	OPENAPI_MIDDLEWARE_OPERATION_IDS=()
 	OPENAPI_MIDDLEWARE_NAMES=()
 	OPENAPI_ERROR=''
+}
+
+openapi_load_responses() {
+	local file=$1
+	local response_records path method operation_id status response_tag
+
+	# yq, rather than Bash, expands the variables in this expression.
+	# shellcheck disable=SC2016
+	response_records=$(yq eval '.paths | to_entries | .[] as $path | $path.value | to_entries | .[] | select(.key == "get" or .key == "put" or .key == "post" or .key == "delete" or .key == "options" or .key == "head" or .key == "patch" or .key == "trace") as $operation | $operation.value.responses | to_entries | .[] | [$path.key, $operation.key, $operation.value.operationId, .key, (.value | tag)] | @tsv' "$file" </dev/null 2>/dev/null) || {
+		openapi_fail 'Unable to read OpenAPI responses.' "$OPENAPI_INVALID"
+		return
+	}
+	while IFS=$'\t' read -r path method operation_id status response_tag; do
+		[[ -z $status ]] && continue
+		if [[ ! $status =~ ^[1-5][0-9]{2}$ ]]; then
+			openapi_fail "Unsupported response status '$status' in: $method $path" "$OPENAPI_UNSUPPORTED"
+			return
+		fi
+		if [[ $response_tag != '!!map' ]]; then
+			openapi_fail "OpenAPI response '$status' in $method $path must be a mapping." "$OPENAPI_INVALID"
+			return
+		fi
+		OPENAPI_RESPONSE_OPERATION_IDS+=("$operation_id")
+		OPENAPI_RESPONSE_STATUSES+=("$status")
+	done <<<"$response_records"
+}
+
+openapi_response_status_is_documented() {
+	local operation_id=$1
+	local status=$2
+	local index
+
+	for ((index = 0; index < ${#OPENAPI_RESPONSE_OPERATION_IDS[@]}; index += 1)); do
+		if [[ ${OPENAPI_RESPONSE_OPERATION_IDS[$index]} == "$operation_id" && ${OPENAPI_RESPONSE_STATUSES[$index]} == "$status" ]]; then
+			return 0
+		fi
+	done
+	return 1
 }
 
 openapi_load_middlewares() {
@@ -608,6 +650,7 @@ openapi_load_routes() {
 			OPENAPI_ROUTE_OPERATION_IDS+=("$operation_id")
 		done <<<"$key_records"
 	done <<<"$path_records"
+	openapi_load_responses "$file" || return $?
 }
 
 openapi_print_routes() {

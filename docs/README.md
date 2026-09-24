@@ -16,10 +16,11 @@ This directory is the source of truth for the project's technical direction:
 
 ## Current status
 
-The project has implemented **Phase 5: Middleware and request observability**.
-OpenAPI operations select an ordered synchronous middleware pipeline. The
-bundled request ID and JSON logging middleware correlate handler context,
-response headers, and stderr request logs.
+The project has implemented **Phase 6: Representation and content
+negotiation**. Handlers return one structured JSON value, while the response
+builder selects JSON or YAML from `Accept`. Unsupported response media produce
+`406`, and handler statuses missing from the OpenAPI operation produce a
+development warning on stderr.
 
 ## Fixed constraints
 

@@ -7,5 +7,5 @@ set_error_response() {
 		status=500
 		response_reason_phrase "$status"
 	fi
-	response_set "$status" 'application/json' "{\"error\":\"$REASON_PHRASE\"}"
+	response_set_structured "$status" "{\"error\":\"$REASON_PHRASE\"}"
 }

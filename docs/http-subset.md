@@ -239,7 +239,7 @@ case-insensitively and may include parameters. Supported representations are:
 Malformed JSON or YAML, an invalid media type, or a non-empty body without
 `Content-Type` returns `400 Bad Request` before the handler runs. A valid but
 unsupported media type returns `415 Unsupported Media Type`. `jq` is checked
-only when a JSON body needs normalization.
+at server startup because every structured response is normalized through it.
 
 ## Phase 4 OpenAPI request validation
 
@@ -312,6 +312,41 @@ numeric `status`, and non-negative integer `durationMs`. The path excludes the
 query string, and logs never include request bodies or arbitrary header values.
 Parse, route, normalization, and validation failures do not run operation
 middleware.
+
+## Phase 6 representations and content negotiation
+
+Handlers return one structured value encoded internally as JSON. The response
+builder validates and compacts that value before selecting one of these output
+representations:
+
+| Media type | Serialization |
+| --- | --- |
+| `application/json` | Compact JSON. |
+| `application/yaml` | YAML generated from the internal JSON value. |
+| `text/yaml` | The same YAML serialization with the requested alias. |
+
+A missing or empty `Accept` selects `application/json`. The supported `Accept`
+subset consists of comma-separated exact media ranges, `application/*`,
+`text/*`, `*/*`, and an optional `q` parameter from zero through one with at
+most three decimal places. Matching is case-insensitive. Malformed alternatives
+and alternatives with unsupported parameters do not match.
+
+For each representation, its most specific matching range determines its
+quality. The representation with the highest non-zero quality wins; specificity
+breaks quality ties, followed by the server preference `application/json`,
+`application/yaml`, then `text/yaml`. A specific `q=0` therefore excludes that
+representation even when a wildcard also matches it. If no representation is
+acceptable, the runtime returns a JSON `406 Not Acceptable` response.
+
+`415 Unsupported Media Type` remains an input error selected when a valid
+request `Content-Type` is not supported. `406` is exclusively an output
+negotiation result. Structured central errors are negotiated like successful
+responses, except that `406` itself always uses JSON.
+
+The OpenAPI adapter records explicit three-digit response statuses for each
+operation. A handler may still select an undocumented status, but the runtime
+emits a development warning to stderr. OpenAPI `default` responses and response
+schema validation are not supported in this phase.
 
 ## Explicit non-goals
 

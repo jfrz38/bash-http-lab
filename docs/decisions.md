@@ -339,9 +339,11 @@ when the selected operation declares parameter or body validation metadata.
 comparison, and numeric bounds without turning Bash into a schema evaluator.
 Keeping schema discovery in `openapi.sh` preserves the OpenAPI adapter boundary.
 
-**Consequences:** Operations without request schemas, including `/health`, do
-not gain a runtime `jq` dependency. Validation failures use generic central
-`400` or `415` responses and never expose schema internals to clients.
+**Consequences:** In Phase 4, operations without request schemas did not gain a
+runtime `jq` dependency. Phase 6 later made `jq` an unconditional `serve`
+dependency for structured response normalization (D024). Validation failures
+use generic central `400` or `415` responses and never expose schema internals
+to clients.
 
 ## D023: Keep middleware synchronous and operation-scoped
 
@@ -362,11 +364,37 @@ Middleware failures select `500`; before failures skip the handler. Request
 logs cover middleware and handler execution but not parsing, validation, or
 socket write time.
 
+## D024: Negotiate structured responses in the response builder
+
+**Status:** Accepted for Phase 6
+
+Handlers provide one JSON structured value without selecting a transport media
+type. The response builder validates that value and negotiates
+`application/json`, `application/yaml`, or `text/yaml` from a deliberately small
+`Accept` subset. Missing or empty `Accept` selects JSON; no acceptable match
+selects a JSON `406` response.
+
+**Rationale:** Keeping the internal representation stable prevents every
+handler from duplicating media selection and YAML conversion. The response
+builder already owns `Content-Type`, byte length, and final serialization, so
+negotiation extends an existing boundary rather than adding a representation
+framework.
+
+The supported matching rules are exact ranges, type wildcards, `*/*`, and `q`
+weights with at most three decimals. A representation takes the quality of its
+most specific range; equal candidates use the server preference JSON,
+`application/yaml`, then `text/yaml`. A specific `q=0` excludes that
+representation even when a broader wildcard permits it.
+
+**Consequences:** `serve` requires both `jq` and Mike Farah `yq` v4. Central
+errors participate in negotiation, except `406` itself. OpenAPI loading records
+explicit response status codes and warns when a handler selects an undocumented
+one, but response-schema validation and `default` responses remain deferred.
+
 ## Deferred decisions
 
 The following decisions should be made when their implementation phase begins:
 
-- content negotiation precedence and fallback behavior;
 - persistence concurrency for the example users file;
 - generated handler formatting and overwrite policy flags;
 - mock response selection when multiple examples or status codes exist.

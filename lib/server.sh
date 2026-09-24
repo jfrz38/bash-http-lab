@@ -13,6 +13,17 @@ start_server() {
 		"EXEC:${connection_command},nofork"
 }
 
+prepare_selected_response() {
+	local accept=${REQUEST_HEADERS[accept]-}
+
+	if response_prepare "$accept"; then
+		return 0
+	fi
+	printf 'Unable to prepare structured HTTP response.\n' >&2
+	set_error_response 500
+	response_prepare ''
+}
+
 handle_connection() {
 	local openapi_file=$1
 	local handlers_dir=$2
@@ -23,6 +34,7 @@ handle_connection() {
 	if ! openapi_load_routes "$openapi_file"; then
 		printf '%s\n' "$OPENAPI_ERROR" >&2
 		set_error_response 500
+		response_prepare '' || return 1
 		write_response
 		return
 	fi
@@ -30,6 +42,7 @@ handle_connection() {
 	if ! body_context_create; then
 		printf 'Unable to create private request body storage.\n' >&2
 		set_error_response 500
+		response_prepare '' || return 1
 		write_response
 		return
 	fi
@@ -62,7 +75,11 @@ handle_connection() {
 							invoke_route_handler "$handlers_dir" "$ROUTE_OPERATION_ID"
 							handler_status=$?
 							case $handler_status in
-							0) ;;
+							0)
+								if ! openapi_response_status_is_documented "$ROUTE_OPERATION_ID" "$RESPONSE_STATUS"; then
+									printf 'Handler %s selected undocumented response status %s.\n' "$ROUTE_OPERATION_ID" "$RESPONSE_STATUS" >&2
+								fi
+								;;
 							"$ROUTE_HANDLER_MISSING") set_error_response 501 ;;
 							*)
 								printf 'Handler failed for operation %s.\n' "$ROUTE_OPERATION_ID" >&2
@@ -72,6 +89,7 @@ handle_connection() {
 						else
 							set_error_response 500
 						fi
+						prepare_selected_response || return 1
 						if ! middleware_run_after "$ROUTE_OPERATION_ID"; then
 							set_error_response 500
 						fi
@@ -118,7 +136,7 @@ handle_connection() {
 		;;
 	esac
 
-	if ! write_response; then
+	if ! prepare_selected_response || ! write_response; then
 		printf 'Unable to serialize HTTP response.\n' >&2
 		body_cleanup
 		return 1
