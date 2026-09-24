@@ -8,6 +8,10 @@ ROOT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 source "$ROOT_DIR/lib/dependencies.sh"
 # shellcheck source=../lib/request.sh
 source "$ROOT_DIR/lib/request.sh"
+# shellcheck source=../lib/params.sh
+source "$ROOT_DIR/lib/params.sh"
+# shellcheck source=../lib/body.sh
+source "$ROOT_DIR/lib/body.sh"
 # shellcheck source=../lib/response.sh
 source "$ROOT_DIR/lib/response.sh"
 # shellcheck source=../lib/errors.sh
@@ -126,6 +130,7 @@ main() {
 			return 2
 		fi
 		require_yq_v4 || return 1
+		trap body_cleanup EXIT INT TERM
 		handle_connection "$1" "$ROOT_DIR/handlers"
 		;;
 	*)

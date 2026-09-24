@@ -51,7 +51,7 @@ test_counts_response_body_bytes() {
 
 test_builds_all_central_error_responses() {
 	local status expected
-	for status in 400 404 405 500 501; do
+	for status in 400 404 405 413 415 500 501; do
 		response_reset
 		set_error_response "$status"
 		expected="HTTP/1.1 $status "
@@ -63,5 +63,5 @@ run_test 'serializes an exact health response' test_serializes_health_response
 run_test 'adds Allow to method-not-allowed responses' test_serializes_method_not_allowed
 run_test 'rejects an unknown response status' test_rejects_unknown_status
 run_test 'counts response body bytes instead of characters' test_counts_response_body_bytes
-run_test 'builds every central Phase 1 error response' test_builds_all_central_error_responses
+run_test 'builds every central error response' test_builds_all_central_error_responses
 finish_tests

@@ -9,7 +9,12 @@ source "$ROOT_DIR/tests/test-helper.sh"
 source "$ROOT_DIR/lib/request.sh"
 
 parse_text() {
-	parse_request <<<"$1"
+	local body_file status
+	body_file=$(mktemp)
+	parse_request "$body_file" <<<"$1"
+	status=$?
+	rm -f "$body_file"
+	return "$status"
 }
 
 test_valid_request() {
@@ -59,12 +64,32 @@ test_content_length_zero_is_accepted() {
 	parse_text $'GET /health HTTP/1.1\r\nContent-Length: 0\r\n\r'
 }
 
-test_positive_content_length_is_not_implemented() {
+test_reads_exact_content_length() {
+	local body_file status body
+	body_file=$(mktemp)
+	parse_request "$body_file" <<<$'POST /health HTTP/1.1\r\nContent-Length: 4\r\n\r\ntestextra'
+	status=$?
+	body=$(<"$body_file")
+	rm -f "$body_file"
+	assert_equal '0' "$status"
+	assert_equal '4' "$REQUEST_CONTENT_LENGTH"
+	assert_equal 'test' "$body"
+}
+
+test_rejects_premature_body_eof() {
 	set +e
-	parse_text $'POST /health HTTP/1.1\r\nContent-Length: 1\r\n\r\nx'
+	parse_text $'POST /health HTTP/1.1\r\nContent-Length: 6\r\n\r\ntest'
 	local status=$?
 	set -e
-	assert_equal "$REQUEST_PARSE_NOT_IMPLEMENTED" "$status"
+	assert_equal "$REQUEST_PARSE_BAD_REQUEST" "$status"
+}
+
+test_rejects_oversized_body() {
+	set +e
+	parse_text $'POST /health HTTP/1.1\r\nContent-Length: 1048577\r\n\r'
+	local status=$?
+	set -e
+	assert_equal "$REQUEST_PARSE_TOO_LARGE" "$status"
 }
 
 test_ambiguous_framing_is_bad_request() {
@@ -169,7 +194,9 @@ run_test 'rejects duplicate headers case-insensitively' test_rejects_duplicate_h
 run_test 'rejects obsolete folded headers' test_rejects_folded_headers
 run_test 'rejects lowercase methods' test_rejects_lowercase_method
 run_test 'accepts a zero content length' test_content_length_zero_is_accepted
-run_test 'rejects positive content length as unsupported' test_positive_content_length_is_not_implemented
+run_test 'reads exactly the declared content length' test_reads_exact_content_length
+run_test 'rejects premature body EOF' test_rejects_premature_body_eof
+run_test 'rejects a body over the configured limit' test_rejects_oversized_body
 run_test 'rejects ambiguous framing' test_ambiguous_framing_is_bad_request
 run_test 'rejects transfer encoding as unsupported' test_transfer_encoding_is_not_implemented
 run_test 'rejects a signed content length' test_rejects_non_decimal_content_length

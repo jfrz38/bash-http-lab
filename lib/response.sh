@@ -31,6 +31,8 @@ response_reason_phrase() {
 	400) REASON_PHRASE='Bad Request' ;;
 	404) REASON_PHRASE='Not Found' ;;
 	405) REASON_PHRASE='Method Not Allowed' ;;
+	413) REASON_PHRASE='Content Too Large' ;;
+	415) REASON_PHRASE='Unsupported Media Type' ;;
 	500) REASON_PHRASE='Internal Server Error' ;;
 	501) REASON_PHRASE='Not Implemented' ;;
 	*) return 1 ;;

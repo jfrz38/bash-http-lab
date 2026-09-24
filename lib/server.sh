@@ -16,7 +16,7 @@ start_server() {
 handle_connection() {
 	local openapi_file=$1
 	local handlers_dir=$2
-	local parse_status route_status handler_status
+	local parse_status route_status params_status body_status handler_status
 
 	response_reset
 	if ! openapi_load_routes "$openapi_file"; then
@@ -25,8 +25,15 @@ handle_connection() {
 		write_response
 		return
 	fi
+	params_reset
+	if ! body_context_create; then
+		printf 'Unable to create private request body storage.\n' >&2
+		set_error_response 500
+		write_response
+		return
+	fi
 
-	parse_request
+	parse_request "$BODY_RAW_FILE"
 	parse_status=$?
 
 	case $parse_status in
@@ -35,16 +42,34 @@ handle_connection() {
 		route_status=$?
 		case $route_status in
 		0)
-			invoke_route_handler "$handlers_dir" "$ROUTE_OPERATION_ID"
-			handler_status=$?
-			case $handler_status in
-			0) ;;
-			"$ROUTE_HANDLER_MISSING") set_error_response 501 ;;
-			*)
-				printf 'Handler failed for operation %s.\n' "$ROUTE_OPERATION_ID" >&2
-				set_error_response 500
-				;;
-			esac
+			params_build
+			params_status=$?
+			if ((params_status != 0)); then
+				set_error_response 400
+			else
+				body_normalize
+				body_status=$?
+				case $body_status in
+				0)
+					invoke_route_handler "$handlers_dir" "$ROUTE_OPERATION_ID"
+					handler_status=$?
+					case $handler_status in
+					0) ;;
+					"$ROUTE_HANDLER_MISSING") set_error_response 501 ;;
+					*)
+						printf 'Handler failed for operation %s.\n' "$ROUTE_OPERATION_ID" >&2
+						set_error_response 500
+						;;
+					esac
+					;;
+				"$BODY_BAD_REQUEST") set_error_response 400 ;;
+				"$BODY_UNSUPPORTED_MEDIA_TYPE") set_error_response 415 ;;
+				*)
+					printf 'Unable to normalize the request body.\n' >&2
+					set_error_response 500
+					;;
+				esac
+			fi
 			;;
 		"$ROUTE_NOT_FOUND") set_error_response 404 ;;
 		"$ROUTE_METHOD_NOT_ALLOWED")
@@ -59,8 +84,10 @@ handle_connection() {
 		;;
 	"$REQUEST_PARSE_BAD_REQUEST") set_error_response 400 ;;
 	"$REQUEST_PARSE_NOT_IMPLEMENTED") set_error_response 501 ;;
+	"$REQUEST_PARSE_TOO_LARGE") set_error_response 413 ;;
 	"$REQUEST_PARSE_TIMEOUT")
 		printf 'Connection timed out before a complete request was received.\n' >&2
+		body_cleanup
 		return 0
 		;;
 	*)
@@ -71,6 +98,8 @@ handle_connection() {
 
 	if ! write_response; then
 		printf 'Unable to serialize HTTP response.\n' >&2
+		body_cleanup
 		return 1
 	fi
+	body_cleanup
 }

@@ -1,0 +1,11 @@
+openapi: 3.0.3
+info:
+  title: Request context fixture
+  version: 1.0.0
+paths:
+  /context/{itemId}:
+    post:
+      operationId: request_context
+      responses:
+        '200':
+          description: Echo selected request context

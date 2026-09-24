@@ -1,0 +1,11 @@
+openapi: 3.0.3
+info:
+  title: Body integration fixture
+  version: 1.0.0
+paths:
+  /body:
+    post:
+      operationId: health
+      responses:
+        '200':
+          description: Body accepted before invoking a known handler
