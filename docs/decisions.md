@@ -308,6 +308,41 @@ state.
 **Consequences:** Every parsed connection creates short-lived filesystem state
 that must be cleaned on every exit path. Binary media types remain unsupported.
 
+## D021: Keep the Phase 4 schema subset flat and explicit
+
+**Status:** Accepted for Phase 4
+
+Parameters support one scalar value with an inline schema. Top-level request
+bodies additionally support object and array types, but nested properties,
+array items, references, composition, and other undeclared schema keywords are
+rejected during OpenAPI validation.
+
+**Rationale:** The existing Bash request context intentionally stores one value
+per parameter name. A flat subset demonstrates contract-driven validation
+without silently approximating collection serialization or implementing a
+general JSON Schema engine.
+
+**Consequences:** Path-item parameters are inherited and operation parameters
+override them by location and name. Extra query and header values are allowed.
+Applications requiring nested validation must wait for an explicit expansion
+of the supported subset.
+
+## D022: Use jq only on validated operations
+
+**Status:** Accepted for Phase 4
+
+The OpenAPI adapter stores compact inline schemas in direct Bash arrays keyed
+by operation ID. After request normalization, `validation.sh` invokes `jq` only
+when the selected operation declares parameter or body validation metadata.
+
+**Rationale:** `jq` provides reliable JSON types, Unicode string lengths, enum
+comparison, and numeric bounds without turning Bash into a schema evaluator.
+Keeping schema discovery in `openapi.sh` preserves the OpenAPI adapter boundary.
+
+**Consequences:** Operations without request schemas, including `/health`, do
+not gain a runtime `jq` dependency. Validation failures use generic central
+`400` or `415` responses and never expose schema internals to clients.
+
 ## Deferred decisions
 
 The following decisions should be made when their implementation phase begins:

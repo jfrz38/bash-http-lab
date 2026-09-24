@@ -2,8 +2,9 @@
 
 Experimental HTTP server built with Bash and Unix tools to expose the work that
 web frameworks normally hide. The current runtime implements one HTTP/1.1
-request per connection, discovers routes from OpenAPI 3.0, and builds a bounded
-request context for handlers.
+request per connection, discovers routes from OpenAPI 3.0, builds a bounded
+request context, and validates a small OpenAPI request-schema subset before
+handlers run.
 
 This is an educational project. It is not production-ready and should not be
 exposed to untrusted networks.
@@ -114,6 +115,8 @@ processes and temporary files are cleaned up when the test exits.
 - request bodies up to 1 MiB using `Content-Length`;
 - JSON validation, YAML-to-JSON normalization, and byte-preserving plain text;
 - separate path, decoded query, and normalized header parameter maps;
+- required OpenAPI parameters and bodies with scalar constraints and top-level
+  body type validation;
 - OpenAPI-discovered routes with literal and whole-segment parameter matching;
 - static-segment precedence and captured path parameters;
 - `GET /health`, books, and authors from the example contract;

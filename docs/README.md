@@ -16,10 +16,10 @@ This directory is the source of truth for the project's technical direction:
 
 ## Current status
 
-The project has implemented **Phase 3: Complete request context**. In addition
-to OpenAPI routing, handlers receive separate path, query, and header maps.
-Bounded `Content-Length` bodies support JSON, YAML, and plain text, with
-structured bodies normalized to JSON before handler execution.
+The project has implemented **Phase 4: OpenAPI validation subset**. OpenAPI
+declares required path, query, and header parameters and top-level request
+bodies. Supported scalar constraints and body types are checked after request
+normalization and before handler execution.
 
 ## Fixed constraints
 

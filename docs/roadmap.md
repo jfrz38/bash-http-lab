@@ -265,6 +265,8 @@ bash-http validate OPENAPI_FILE
 **Goal:** Validate request values against a deliberately small documented
 subset before invoking handlers.
 
+**Status:** Complete.
+
 ### Initial subset
 
 - parameter locations: path, query, and header;
@@ -280,6 +282,20 @@ subset before invoking handlers.
   the OpenAPI document instead of being ignored.
 - The supported subset is documented with examples and boundary tests.
 - Full OpenAPI and JSON Schema compliance is still an explicit non-goal.
+
+### Adopted implementation decisions
+
+- path, query, and header parameters are scalar; object and array schemas are
+  supported only for top-level request bodies;
+- path-item parameters are inherited and operation parameters override them by
+  location and name;
+- request schemas are inline and flat, with unsupported correctness-affecting
+  keywords rejected during document validation;
+- validation metadata uses direct Bash arrays keyed by operation ID, while
+  `jq` performs runtime type and constraint checks only for operations that
+  declare validation rules;
+- undeclared query and header values remain available to handlers, while a
+  non-empty body with no matching declared media type returns `415`.
 
 ## Phase 5: Middleware and request observability
 
