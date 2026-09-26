@@ -1,0 +1,16 @@
+openapi: 3.0.3
+info:
+  title: External response example fixture
+  version: 1.0.0
+paths:
+  /external:
+    get:
+      operationId: external_example
+      responses:
+        '200':
+          description: External example
+          content:
+            application/json:
+              examples:
+                remote:
+                  externalValue: https://example.test/user.json

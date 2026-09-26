@@ -12,6 +12,8 @@ test_help() {
 	local output
 	output=$(bash "$ROOT_DIR/bin/bash-http" help)
 	assert_contains "$output" 'bash-http serve OPENAPI_FILE [--host HOST] [--port PORT]'
+	assert_contains "$output" 'bash-http mock OPENAPI_FILE [--host HOST] [--port PORT]'
+	assert_contains "$output" 'bash-http generate OPENAPI_FILE'
 }
 
 test_missing_openapi_file() {
@@ -34,8 +36,8 @@ test_lists_openapi_routes() {
 	local output
 	output=$(bash "$ROOT_DIR/bin/bash-http" routes "$ROOT_DIR/openapi.yaml")
 	assert_contains "$output" 'METHOD'
-	assert_contains "$output" 'GET      /books/{bookId}'
-	assert_contains "$output" 'get_author'
+	assert_contains "$output" 'GET      /users/{userId}'
+	assert_contains "$output" 'get_user'
 }
 
 test_invalid_port_precedes_dependency_check() {

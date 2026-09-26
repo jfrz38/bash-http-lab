@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
-  title: Bash HTTP Lab Catalog
-  version: 0.1.0
+  title: Bash HTTP Lab Users API
+  version: 0.2.0
 paths:
   /health:
     get:
@@ -11,74 +11,95 @@ paths:
         '200':
           description: Runtime health
           content:
-            application/json: {}
+            application/json:
+              example:
+                status: ok
             application/yaml: {}
             text/yaml: {}
-  /books:
+  /users:
     get:
-      operationId: list_books
+      operationId: list_users
       x-middlewares: [requestId, logging]
       responses:
         '200':
-          description: Books in the example catalog
+          description: All users
           content:
-            application/json: {}
+            application/json:
+              example:
+                - id: 1
+                  name: Ada Lovelace
+                - id: 2
+                  name: Grace Hopper
             application/yaml: {}
             text/yaml: {}
-  /books/{bookId}:
-    get:
-      operationId: get_book
+    post:
+      operationId: create_user
       x-middlewares: [requestId, logging]
-      parameters:
-        - name: bookId
-          in: path
-          required: true
-          schema:
-            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+            example:
+              name: Katherine Johnson
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              example:
+                id: 3
+                name: Katherine Johnson
+            application/yaml: {}
+            text/yaml: {}
+  /users/{userId}:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    get:
+      operationId: get_user
+      x-middlewares: [requestId, logging]
       responses:
         '200':
-          description: One book
+          description: One user
           content:
-            application/json: {}
+            application/json:
+              example:
+                id: 1
+                name: Ada Lovelace
             application/yaml: {}
             text/yaml: {}
         '404':
-          description: Book not found
+          description: User not found
           content:
-            application/json: {}
+            application/json:
+              example:
+                error: Not Found
             application/yaml: {}
             text/yaml: {}
-  /authors:
-    get:
-      operationId: list_authors
+    delete:
+      operationId: delete_user
       x-middlewares: [requestId, logging]
       responses:
         '200':
-          description: Authors in the example catalog
+          description: User deleted
           content:
-            application/json: {}
-            application/yaml: {}
-            text/yaml: {}
-  /authors/{authorId}:
-    get:
-      operationId: get_author
-      x-middlewares: [requestId, logging]
-      parameters:
-        - name: authorId
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: One author
-          content:
-            application/json: {}
+            application/json:
+              example:
+                deleted: true
+                id: '1'
             application/yaml: {}
             text/yaml: {}
         '404':
-          description: Author not found
+          description: User not found
           content:
-            application/json: {}
+            application/json:
+              example:
+                error: Not Found
             application/yaml: {}
             text/yaml: {}

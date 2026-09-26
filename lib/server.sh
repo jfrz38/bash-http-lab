@@ -5,9 +5,10 @@ start_server() {
 	local port=$2
 	local entrypoint=$3
 	local openapi_file=$4
+	local server_mode=${5:-serve}
 	local connection_command
 
-	printf -v connection_command 'bash %q __handle-connection %q' "$entrypoint" "$openapi_file"
+	printf -v connection_command 'bash %q __handle-connection %q %q' "$entrypoint" "$openapi_file" "$server_mode"
 	exec socat -T "$REQUEST_TIMEOUT_SECONDS" \
 		"TCP-LISTEN:${port},bind=${host},reuseaddr,fork" \
 		"EXEC:${connection_command},nofork"
@@ -27,6 +28,7 @@ prepare_selected_response() {
 handle_connection() {
 	local openapi_file=$1
 	local handlers_dir=$2
+	local server_mode=${3:-serve}
 	local parse_status route_status params_status body_status validation_status handler_status middleware_status
 
 	response_reset
@@ -72,8 +74,17 @@ handle_connection() {
 						middleware_run_before "$ROUTE_OPERATION_ID"
 						middleware_status=$?
 						if ((middleware_status == 0)); then
-							invoke_route_handler "$handlers_dir" "$ROUTE_OPERATION_ID"
-							handler_status=$?
+							if [[ $server_mode == 'mock' ]]; then
+								if openapi_select_mock_response "$ROUTE_OPERATION_ID"; then
+									response_set_structured "$OPENAPI_MOCK_STATUS" "$OPENAPI_MOCK_BODY"
+									handler_status=0
+								else
+									handler_status=$ROUTE_HANDLER_MISSING
+								fi
+							else
+								invoke_route_handler "$handlers_dir" "$ROUTE_OPERATION_ID"
+								handler_status=$?
+							fi
 							case $handler_status in
 							0)
 								if ! openapi_response_status_is_documented "$ROUTE_OPERATION_ID" "$RESPONSE_STATUS"; then

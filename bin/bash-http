@@ -30,20 +30,26 @@ source "$ROOT_DIR/lib/middleware.sh"
 source "$ROOT_DIR/lib/router.sh"
 # shellcheck source=../lib/server.sh
 source "$ROOT_DIR/lib/server.sh"
+# shellcheck source=../lib/generator.sh
+source "$ROOT_DIR/lib/generator.sh"
 
 print_help() {
 	cat <<'EOF'
 Usage:
   bash-http help
   bash-http serve OPENAPI_FILE [--host HOST] [--port PORT]
+  bash-http mock OPENAPI_FILE [--host HOST] [--port PORT]
   bash-http routes OPENAPI_FILE
   bash-http validate OPENAPI_FILE
+  bash-http generate OPENAPI_FILE
 
 Commands:
   help      Show this help.
   serve     Start the HTTP server.
+  mock      Start the HTTP server using documented response examples.
   routes    List operations discovered from OpenAPI.
   validate  Validate the supported OpenAPI routing subset.
+  generate  Create missing handler files without overwriting existing files.
 
 Serve defaults:
   host: 127.0.0.1
@@ -51,13 +57,15 @@ Serve defaults:
 EOF
 }
 
-serve_command() {
+server_command() {
+	local command=$1
+	shift
 	local host='127.0.0.1'
 	local port='8080'
 	local openapi_file
 
 	if (($# == 0)) || [[ $1 == --* ]]; then
-		printf 'The serve command requires an OpenAPI file.\n' >&2
+		printf 'The %s command requires an OpenAPI file.\n' "$command" >&2
 		return 2
 	fi
 	openapi_file=$1
@@ -78,7 +86,7 @@ serve_command() {
 			shift 2
 			;;
 		*)
-			printf 'Unknown serve option: %s.\n' "$1" >&2
+			printf 'Unknown %s option: %s.\n' "$command" "$1" >&2
 			return 2
 			;;
 		esac
@@ -93,7 +101,22 @@ serve_command() {
 	fi
 	require_command jq || return 1
 	require_command socat || return 1
-	start_server "$host" "$port" "$ROOT_DIR/bin/bash-http" "$openapi_file"
+	start_server "$host" "$port" "$ROOT_DIR/bin/bash-http" "$openapi_file" "$command"
+}
+
+generate_command() {
+	local openapi_file=${1:-}
+
+	if (($# != 1)); then
+		printf 'The generate command requires exactly one OpenAPI file.\n' >&2
+		return 2
+	fi
+	require_yq_v4 || return 1
+	if ! openapi_load_routes "$openapi_file"; then
+		printf '%s\n' "$OPENAPI_ERROR" >&2
+		return 1
+	fi
+	generate_handlers "$ROOT_DIR/handlers"
 }
 
 openapi_command() {
@@ -131,17 +154,18 @@ main() {
 		fi
 		print_help
 		;;
-	serve) serve_command "$@" ;;
+	serve | mock) server_command "$command" "$@" ;;
 	routes | validate) openapi_command "$command" "$@" ;;
+	generate) generate_command "$@" ;;
 	__handle-connection)
-		if (($# != 1)); then
-			printf 'The private connection operation requires an OpenAPI file.\n' >&2
+		if (($# != 2)) || [[ $2 != 'serve' && $2 != 'mock' ]]; then
+			printf 'The private connection operation requires an OpenAPI file and server mode.\n' >&2
 			return 2
 		fi
 		require_yq_v4 || return 1
 		require_command jq || return 1
 		trap body_cleanup EXIT INT TERM
-		handle_connection "$1" "$ROOT_DIR/handlers"
+		handle_connection "$1" "$ROOT_DIR/handlers" "$2"
 		;;
 	*)
 		printf 'Unknown command: %s.\n' "$command" >&2

@@ -377,6 +377,8 @@ handlers.
 **Goal:** Add tools that depend on a stable core and exercise the complete
 runtime with a small users API.
 
+**Status:** Complete.
+
 ### Scope
 
 - `generate` missing handler files without overwriting existing files by
@@ -395,6 +397,19 @@ runtime with a small users API.
 - Persistence limitations and concurrent-write risks are explicit.
 - Tooling remains secondary to the runtime and does not duplicate its parsing
   or routing logic.
+
+### Adopted implementation decisions
+
+- `generate` creates only missing `handlers/<operationId>.sh` files and has no
+  overwrite or force mode;
+- `mock` runs routing, request validation, middleware, negotiation, and response
+  serialization normally, replacing only handler invocation;
+- mock selection prefers the lowest `2xx` status with an example, then the
+  lowest status with an example; direct examples precede lexically ordered named
+  examples, and external examples are unsupported;
+- the users file is replaced through a same-directory temporary file and
+  rename, but has no locking or conflict detection, so concurrent writes may be
+  lost.
 
 ## Project non-goals
 

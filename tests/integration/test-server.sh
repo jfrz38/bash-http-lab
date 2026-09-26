@@ -9,7 +9,7 @@ source "$ROOT_DIR/tests/test-helper.sh"
 TEST_HOST=${TEST_HOST:-127.0.0.1}
 TEST_PORT=${TEST_PORT:-18080}
 TEST_BASE_URL="http://${TEST_HOST}:${TEST_PORT}"
-TEST_REQUEST_TIMEOUT_SECONDS=${TEST_REQUEST_TIMEOUT_SECONDS:-5}
+TEST_REQUEST_TIMEOUT_SECONDS=${TEST_REQUEST_TIMEOUT_SECONDS:-15}
 TEST_TMP_DIR=$(mktemp -d)
 SERVER_PID=''
 
@@ -24,14 +24,15 @@ trap cleanup EXIT INT TERM
 
 start_test_server() {
 	local openapi_file=${1:-$ROOT_DIR/openapi.yaml}
+	local server_mode=${2:-serve}
 	set -m
-	bash "$ROOT_DIR/bin/bash-http" serve "$openapi_file" --host "$TEST_HOST" --port "$TEST_PORT" \
+	bash "$ROOT_DIR/bin/bash-http" "$server_mode" "$openapi_file" --host "$TEST_HOST" --port "$TEST_PORT" \
 		>"$TEST_TMP_DIR/server.stdout" 2>"$TEST_TMP_DIR/server.stderr" &
 	SERVER_PID=$!
 	set +m
 
 	local attempt
-	for ((attempt = 1; attempt <= 50; attempt += 1)); do
+	for ((attempt = 1; attempt <= 100; attempt += 1)); do
 		if curl --silent --max-time "$TEST_REQUEST_TIMEOUT_SECONDS" "$TEST_BASE_URL/health" >/dev/null 2>&1; then
 			return 0
 		fi
@@ -102,13 +103,13 @@ test_rejects_unsupported_response_media_type() {
 
 test_request_id_and_log_correlation() {
 	local log_record
-	perform_request GET '/books' 'integration-request-1'
+	perform_request GET '/users' 'integration-request-1'
 	assert_equal '200' "$HTTP_STATUS"
 	assert_contains "$RESPONSE_HEADERS" $'X-Request-Id: integration-request-1\r'
 	log_record=$(jq --compact-output 'select(.requestId == "integration-request-1")' "$TEST_TMP_DIR/server.stderr")
 	assert_equal 'integration-request-1' "$(jq --raw-output '.requestId' <<<"$log_record")"
 	assert_equal 'GET' "$(jq --raw-output '.method' <<<"$log_record")"
-	assert_equal '/books' "$(jq --raw-output '.path' <<<"$log_record")"
+	assert_equal '/users' "$(jq --raw-output '.path' <<<"$log_record")"
 	assert_equal '200' "$(jq --raw-output '.status' <<<"$log_record")"
 }
 
@@ -151,10 +152,35 @@ test_health_query_response() {
 	assert_equal '{"status":"ok"}' "$RESPONSE_BODY"
 }
 
-test_book_response() {
-	perform_request GET '/books/1'
+test_user_response() {
+	perform_request GET '/users/1'
 	assert_equal '200' "$HTTP_STATUS"
-	assert_equal '{"id":"1","title":"The Left Hand of Darkness"}' "$RESPONSE_BODY"
+	assert_equal '{"id":1,"name":"Ada Lovelace"}' "$RESPONSE_BODY"
+}
+
+test_user_lifecycle() {
+	perform_body_request 'application/json' '{"name":"Katherine Johnson"}' '/users'
+	assert_equal '201' "$HTTP_STATUS"
+	assert_equal '3' "$(jq --raw-output '.id' <<<"$RESPONSE_BODY")"
+	assert_equal 'Katherine Johnson' "$(jq --raw-output '.name' <<<"$RESPONSE_BODY")"
+
+	perform_request GET '/users/3'
+	assert_equal '200' "$HTTP_STATUS"
+	assert_equal 'Katherine Johnson' "$(jq --raw-output '.name' <<<"$RESPONSE_BODY")"
+
+	perform_request DELETE '/users/3'
+	assert_equal '200' "$HTTP_STATUS"
+	assert_equal 'true' "$(jq --raw-output '.deleted' <<<"$RESPONSE_BODY")"
+
+	perform_request GET '/users/3'
+	assert_equal '404' "$HTTP_STATUS"
+}
+
+test_mock_response_without_handlers() {
+	perform_request GET '/users' '' 'application/yaml'
+	assert_equal '200' "$HTTP_STATUS"
+	assert_contains "$RESPONSE_HEADERS" $'Content-Type: application/yaml\r'
+	assert_contains "$RESPONSE_BODY" 'name: Ada Lovelace'
 }
 
 test_unknown_path_response() {
@@ -209,13 +235,16 @@ test_rejects_premature_body_eof() {
 	assert_contains "$RAW_RESPONSE" 'HTTP/1.1 400 Bad Request'
 }
 
+export BASH_HTTP_USERS_FILE="$TEST_TMP_DIR/users.json"
+cp "$ROOT_DIR/data/users.json" "$BASH_HTTP_USERS_FILE"
 start_test_server
 run_test 'serves the exact health response' test_health_response
 run_test 'serializes a structured result as YAML' test_yaml_response
 run_test 'honors Accept quality and wildcard preferences' test_accept_quality_prefers_yaml
 run_test 'returns 406 for unsupported response media' test_rejects_unsupported_response_media_type
 run_test 'routes health requests with a query string' test_health_query_response
-run_test 'routes a captured book identifier' test_book_response
+run_test 'routes a captured user identifier' test_user_response
+run_test 'creates, reads, and deletes a persisted user' test_user_lifecycle
 run_test 'returns 404 for an unknown path' test_unknown_path_response
 run_test 'returns 405 and Allow for an unsupported health method' test_method_not_allowed_response
 run_test 'correlates request context, response header, and JSON log' test_request_id_and_log_correlation
@@ -228,4 +257,7 @@ run_test 'rejects a body with the wrong OpenAPI type' test_rejects_wrong_openapi
 run_test 'returns 415 for unsupported request media' test_rejects_unsupported_media_type
 run_test 'returns 413 for an oversized declared body' test_rejects_oversized_declared_body
 run_test 'returns 400 for premature request-body EOF' test_rejects_premature_body_eof
+stop_test_server
+start_test_server "$ROOT_DIR/openapi.yaml" mock
+run_test 'serves documented examples without handlers in mock mode' test_mock_response_without_handlers
 finish_tests

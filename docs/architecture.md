@@ -85,8 +85,11 @@ lib/
   body.sh                Request body storage and normalization
   validation.sh          Supported schema constraints (Phase 4)
   middleware.sh          Synchronous middleware pipeline (Phase 5)
+  generator.sh           Non-destructive handler generation (Phase 7)
 handlers/
   health.sh              Initial health handler
+data/
+  users.json             Primitive example API persistence (Phase 7)
 middleware/
   logging.sh             Structured request logging (Phase 5)
   request-id.sh          Request ID middleware (Phase 5)
@@ -135,8 +138,10 @@ The current CLI exposes:
 
 ```text
 bash-http serve OPENAPI_FILE [--host HOST] [--port PORT]
+bash-http mock OPENAPI_FILE [--host HOST] [--port PORT]
 bash-http routes OPENAPI_FILE
 bash-http validate OPENAPI_FILE
+bash-http generate OPENAPI_FILE
 bash-http help
 ```
 
@@ -147,10 +152,11 @@ temporary interface.
 
 Dependency checks are command-specific:
 
-- `serve` requires Bash, `socat`, `jq`, and Mike Farah `yq` v4. Structured JSON
+- `serve` and `mock` require Bash, `socat`, `jq`, and Mike Farah `yq` v4. Structured JSON
   results are normalized with `jq`, and YAML responses are serialized with
   `yq`.
-- `routes` and `validate` require Mike Farah `yq` v4 but not `socat`.
+- `routes`, `validate`, and `generate` require Mike Farah `yq` v4 but not
+  `socat`.
 - JSON request normalization also uses the runtime `jq` dependency when a JSON
   body is received.
 - Request validation requires `jq` only for operations that declare supported
@@ -195,7 +201,8 @@ The connection entry point coordinates the request lifecycle:
 4. Build query and header maps and normalize the request body.
 5. Validate declared parameters and request bodies.
 6. Run selected middleware before hooks in declaration order.
-7. Invoke the selected handler when appropriate and select the response status.
+7. Invoke the selected handler, or select a documented example in mock mode,
+   and select the response status.
 8. Prepare the selected representation and run applicable middleware after
    hooks in declaration order.
 9. Finalize and write exactly one response to stdout.
@@ -247,7 +254,8 @@ independent of handler loading.
 
 `openapi.sh` uses Mike Farah `yq` v4 to read the supported
 OpenAPI 3.0 subset. It converts document data into small internal route and
-validation representations, including explicit response statuses by operation.
+validation representations, including explicit response statuses and response
+examples by operation.
 No other module should contain OpenAPI `yq`
 queries; body normalization may use `yq` to parse a YAML representation.
 
@@ -263,6 +271,10 @@ example, `get_book` maps to `handlers/get_book.sh` and `handle_get_book`.
 Handler scripts are
 sourced from a trusted project directory; client input never selects an
 arbitrary filesystem path.
+
+The `generate` command uses the same validated operation IDs to create missing
+handler stubs. Existing paths are skipped and there is deliberately no force or
+overwrite option.
 
 Handlers consume request context and use response helpers. They must not:
 
@@ -347,6 +359,17 @@ cannot preserve arbitrary bytes safely. `body.sh` creates a mode-700 directory
 with `mktemp -d`, stores raw and normalized representations separately, and
 removes the directory on normal completion, handled failures, and process exit
 through the connection trap.
+
+## Example persistence
+
+The users example reads and writes `data/users.json` directly. Updates are
+rendered into a temporary file in the same directory and renamed over the data
+file, preventing partial-file visibility. This is not a general persistence
+abstraction and intentionally has no locks, versions, or transactions.
+Concurrent create or delete requests can read the same prior state and the last
+rename wins, potentially duplicating IDs or losing an update. The Compose
+runtime keeps its root filesystem read-only but mounts `/workspace/data` as a
+writable named volume.
 
 ## Security and operational posture
 
