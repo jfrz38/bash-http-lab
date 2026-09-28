@@ -96,6 +96,7 @@ no production concurrency controls.
 │   └── fixtures/              # OpenAPI and handler test fixtures
 ├── docs/
 │   ├── architecture.md
+│   ├── development.md
 │   └── http-subset.md
 ├── .github/
 │   └── workflows/             # Continuous integration

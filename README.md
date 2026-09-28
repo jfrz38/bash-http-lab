@@ -1,170 +1,85 @@
 # bash-http-lab
 
-`bash-http-lab` started as a small experiment: I wanted to see what it would
-look like to build, in plain Bash, the pieces that a web framework normally
-provides.
+`bash-http-lab` is an experiment to implement in plain Bash some of the features
+normally provided by a web framework.
 
-The result is a deliberately small HTTP/1.1 server that parses requests, matches
-OpenAPI operations, validates input, runs middleware, invokes handlers, and
-builds responses. It is meant for learning and exploration rather than as a
-replacement for a real web framework.
+It is a small HTTP server that accepts requests, finds routes, validates input,
+runs middleware, calls handlers, and sends responses. The goal is to understand
+what usually happens behind a framework, not to replace one.
 
-It is not production-ready and must not be exposed to untrusted networks.
+This is a learning experiment, not a production server. Please do not put it on
+the internet.
 
-```text
-client
-  -> socat listener
-  -> request parser
-  -> OpenAPI router
-  -> request validation
-  -> middleware
-  -> Bash handler
-  -> content negotiation and response serialization
-```
+## What is in here
 
-## Quick start
+- an HTTP/1.1 server written in Bash;
+- `socat` handling the TCP connections;
+- an OpenAPI document defining the available routes;
+- validation, middleware, and handlers implemented as shell scripts;
+- JSON and YAML responses;
+- a tiny users API backed by a JSON file.
 
-Docker Engine with the Compose plugin provides the shortest path to a supported
-Linux runtime with all dependencies installed:
+It deliberately supports only a small part of HTTP and OpenAPI. That keeps the
+experiment understandable and, more importantly, finite.
+
+## Try it
+
+The quickest way to run it is with Docker:
 
 ```bash
 docker compose up --build --wait server
 curl http://127.0.0.1:8080/health
 ```
 
-The response body is:
+You should get:
 
 ```json
 {"status":"ok"}
 ```
 
-The bundled OpenAPI document also exposes a small users API:
+There is also a small users API to play with:
 
 ```bash
 curl http://127.0.0.1:8080/users
+curl http://127.0.0.1:8080/users/1
 curl --request POST --header 'Content-Type: application/json' \
   --data '{"name":"Katherine Johnson"}' http://127.0.0.1:8080/users
-curl --header 'Accept: application/yaml' http://127.0.0.1:8080/users/1
-curl --request DELETE http://127.0.0.1:8080/users/2
 ```
 
-Stop the sandbox with:
+When you are finished:
 
 ```bash
 docker compose down
 ```
 
-Set `PORT` to publish the server on a different host port:
-
-```bash
-PORT=9090 docker compose up --build --wait server
-```
-
-## What it demonstrates
-
-- one HTTP/1.1 request per connection using a `socat` process;
-- strict request-line, header, and body framing checks;
-- routes and handler names discovered from OpenAPI 3.0;
-- path, query, header, and body request context;
-- a deliberately small OpenAPI request-validation subset;
-- ordered request ID and structured logging middleware;
-- JSON and YAML response negotiation;
-- non-destructive handler generation and OpenAPI example mocking;
-- explicit error propagation and response construction in Bash.
-
-The example users API stores data in `data/users.json`. File replacement is
-atomic, but concurrent updates are not coordinated and can be lost. This
-persistence is intentionally simple and exists only to exercise the complete
-request pipeline.
-
-## Native usage
-
-Linux and WSL are supported. The runtime requires:
-
-- Bash 5.2 or newer;
-- `socat`;
-- `jq`;
-- [Mike Farah `yq`](https://github.com/mikefarah/yq/releases) version 4.
-
-On Ubuntu 24.04, install the packaged dependencies with:
-
-```bash
-sudo apt-get update
-sudo apt-get install bash curl jq make shellcheck shfmt socat
-```
-
-Install `yq` from its official releases and verify that `yq --version` reports
-major version 4. Other programs named `yq` are not compatible.
-
-Start the server on its default `127.0.0.1:8080` address:
-
-```bash
-./bin/bash-http serve openapi.yaml
-```
-
-Select another address when needed:
-
-```bash
-./bin/bash-http serve openapi.yaml --host 127.0.0.1 --port 9090
-```
-
-Hosts must be IPv4 addresses or DNS hostnames. Ports must be integers from 1 to
-65535.
-
-## CLI
+## Roughly how it works
 
 ```text
-bash-http serve OPENAPI_FILE [--host HOST] [--port PORT]
-bash-http mock OPENAPI_FILE [--host HOST] [--port PORT]
-bash-http routes OPENAPI_FILE
-bash-http validate OPENAPI_FILE
-bash-http generate OPENAPI_FILE
-bash-http help
+HTTP client -> socat -> Bash runtime -> Bash handler -> HTTP response
 ```
 
-- `serve` runs operations through their Bash handlers.
-- `mock` runs the same request pipeline but returns documented OpenAPI response
-  examples instead of invoking handlers.
-- `routes` lists operations discovered from the document.
-- `validate` checks the supported OpenAPI subset without starting a listener.
-- `generate` creates missing handler files and never overwrites existing files.
+The OpenAPI file says which routes exist and which handler belongs to each one.
+The Bash runtime does the plumbing around them: reading the request, checking
+the input, running middleware, and building the response.
 
-Mock mode chooses the lowest documented `2xx` status containing an example. If
-none exists, it chooses the lowest documented status containing an example. A
-direct `example` takes precedence over lexically ordered named `examples`.
-External examples are unsupported.
+## Deliberate shortcuts
 
-## Development
+- each connection handles one request and then closes;
+- the example API stores users in `data/users.json`;
+- concurrent writes are not coordinated;
+- only a documented subset of HTTP, OpenAPI, and JSON Schema is supported.
 
-GNU Make is the developer interface:
+Those choices make the code easier to inspect, but they also make the project
+unsuitable for production use.
 
-```bash
-make                    # list public targets
-make test-unit          # run tests without network infrastructure
-make test-integration   # exercise the real socat listener with curl
-make test               # run all tests
-make lint               # run ShellCheck
-make format             # format scripts with shfmt
-make format-check       # verify formatting
-make check              # run all native checks
-make run                # run the server in the foreground
-make container-check    # run the reproducible CI verification path
-make container-up       # start the sandbox server
-make container-down     # stop and remove sandbox containers
-```
+## More detail
 
-Integration tests accept `TEST_HOST` and `TEST_PORT`. `HOST`, `PORT`, and
-`OPENAPI_FILE` configure `make run`.
-
-## Limits
-
-The server intentionally supports a narrow subset of HTTP and OpenAPI. Notable
-non-goals include TLS, persistent connections, chunked bodies, HTTP/2 and
-HTTP/3, WebSockets, arbitrary binary streaming, high concurrency, complete
-OpenAPI or JSON Schema support, and production hardening.
-
-See [Architecture](docs/architecture.md) for the runtime boundaries and
-[Supported HTTP subset](docs/http-subset.md) for the exact protocol contract.
+- [Architecture](docs/architecture.md) explains the runtime, its components,
+  and the repository structure.
+- [Supported HTTP subset](docs/http-subset.md) describes the exact protocol and
+  OpenAPI behavior.
+- [Development](docs/development.md) covers native setup, CLI commands, tests,
+  and other development tasks.
 
 ## License
 
