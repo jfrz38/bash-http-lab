@@ -1,155 +1,86 @@
 # bash-http-lab
 
-Experimental HTTP server built with Bash and Unix tools to expose the work that
-web frameworks normally hide. The current runtime implements one HTTP/1.1
-request per connection, discovers routes from OpenAPI 3.0, builds a bounded
-request context, and validates a small OpenAPI request-schema subset before
-handlers run. Operations can also declare ordered request ID and structured
-logging middleware. Handlers return one structured JSON value that the response
-builder can serialize as JSON or YAML through `Accept` negotiation. Developer
-commands can generate missing handlers or serve documented OpenAPI examples,
-and the included users API persists its demonstration data in a JSON file.
+`bash-http-lab` is an experiment to implement in plain Bash some of the features
+normally provided by a web framework.
 
-This is an educational project. It is not production-ready and should not be
-exposed to untrusted networks.
+It is a small HTTP server that accepts requests, finds routes, validates input,
+runs middleware, calls handlers, and sends responses. The goal is to understand
+what usually happens behind a framework, not to replace one.
 
-## Requirements
+This is a learning experiment, not a production server. Please do not put it on
+the internet.
 
-The supported environments are Linux and WSL. Runtime requirements are:
+## What is in here
 
-- Bash 5.2 or newer;
-- `socat`;
-- `jq` for structured responses and JSON request bodies;
-- Mike Farah `yq` version 4.
+- an HTTP/1.1 server written in Bash;
+- `socat` handling the TCP connections;
+- an OpenAPI document defining the available routes;
+- validation, middleware, and handlers implemented as shell scripts;
+- JSON and YAML responses;
+- a tiny users API backed by a JSON file.
 
-Development and tests additionally use `curl`, GNU Make, `shellcheck`, and
-`shfmt`. On Ubuntu 24.04 these tools can be installed with:
+It deliberately supports only a small part of HTTP and OpenAPI. That keeps the
+experiment understandable and, more importantly, finite.
 
-```bash
-sudo apt-get update
-sudo apt-get install bash curl jq make shellcheck shfmt socat
-```
+## Try it
 
-Install `yq` from the official
-[Mike Farah releases](https://github.com/mikefarah/yq/releases) and verify that
-`yq --version` identifies major version 4. Other programs named `yq` are not
-compatible.
-
-Docker Engine with the Compose plugin is an alternative development sandbox.
-It supplies the supported Linux runtime and every project tool, including
-`socat` and the pinned Mike Farah `yq` binary. The container image is for local
-development and CI verification only; it is not a production deployment
-artifact.
-
-## Usage
-
-Start the server on the default loopback address and port:
+The quickest way to run it is with Docker:
 
 ```bash
-./bin/bash-http serve openapi.yaml
-```
-
-Select another host or port when needed:
-
-```bash
-./bin/bash-http serve openapi.yaml --host 127.0.0.1 --port 9090
-```
-
-Hosts must be IPv4 addresses or DNS hostnames. Ports must be integers from 1 to
-65535. The server binds to `127.0.0.1:8080` by default.
-
-With the server running:
-
-```bash
+docker compose up --build --wait server
 curl http://127.0.0.1:8080/health
-curl http://127.0.0.1:8080/users
-curl --request POST --header 'Content-Type: application/json' \
-  --data '{"name":"Katherine Johnson"}' http://127.0.0.1:8080/users
-curl --header 'Accept: application/yaml' http://127.0.0.1:8080/users/1
 ```
 
-The response body is exactly:
+You should get:
 
 ```json
 {"status":"ok"}
 ```
 
-Inspect or validate the contract without starting the listener:
+There is also a small users API to play with:
 
 ```bash
-./bin/bash-http routes openapi.yaml
-./bin/bash-http validate openapi.yaml
+curl http://127.0.0.1:8080/users
+curl http://127.0.0.1:8080/users/1
+curl --request POST --header 'Content-Type: application/json' \
+  --data '{"name":"Katherine Johnson"}' http://127.0.0.1:8080/users
 ```
 
-Generate only handlers that do not already exist, or run the same request
-pipeline using documented OpenAPI response examples instead of handlers:
+When you are finished:
 
 ```bash
-./bin/bash-http generate openapi.yaml
-./bin/bash-http mock openapi.yaml
+docker compose down
 ```
 
-`generate` never overwrites an existing handler. Mock mode chooses the lowest
-documented `2xx` status with an example, falling back to the lowest documented
-status with an example. A direct `example` wins over named `examples`; named
-examples are considered in lexical order. External examples are unsupported.
+## Roughly how it works
 
-The example contract exposes health plus list, read, create, and delete user
-operations. User data is stored directly in `data/users.json`. Each update is
-written to a temporary file and renamed into place, so readers do not observe a
-partially written file. There is no locking or conflict detection: concurrent
-writes can allocate the same ID or overwrite one another. This intentionally
-primitive persistence is only suitable for the educational example.
-
-## Development
-
-GNU Make is the canonical developer interface:
-
-```bash
-make                    # list public targets
-make test-unit          # run tests without network infrastructure
-make test-integration   # start the real socat listener and call it with curl
-make test               # run all tests
-make lint               # run shellcheck
-make format             # format scripts with shfmt
-make format-check       # verify formatting
-make check              # run every required check
-make run                # run the server in the foreground
-make container-build    # build the runtime and test images
-make container-check    # run every check and smoke-test the runtime image
-make container-up       # start the sandbox server on PORT (default 8080)
-make container-down     # stop and remove sandbox containers
+```text
+HTTP client -> socat -> Bash runtime -> Bash handler -> HTTP response
 ```
 
-With Docker, `make container-check` is the reproducible verification path used
-by CI. It runs lint, formatting checks, unit tests, and the real `socat` network
-integration test inside the test image before health-checking the minimal
-runtime image. After `make container-up`, the example API is available at
-`http://127.0.0.1:8080`; use `PORT=9090 make container-up` to change the host
-port.
+The OpenAPI file says which routes exist and which handler belongs to each one.
+The Bash runtime does the plumbing around them: reading the request, checking
+the input, running middleware, and building the response.
 
-Integration tests use `TEST_HOST` and `TEST_PORT` when those environment
-variables are set. Startup uses bounded readiness probes, and all listener
-processes and temporary files are cleaned up when the test exits.
+## Deliberate shortcuts
 
-## Current HTTP subset
+- each connection handles one request and then closes;
+- the example API stores users in `data/users.json`;
+- concurrent writes are not coordinated;
+- only a documented subset of HTTP, OpenAPI, and JSON Schema is supported.
 
-- one HTTP/1.1 request and response per connection;
-- strict CRLF request lines and headers;
-- request bodies up to 1 MiB using `Content-Length`;
-- JSON validation, YAML-to-JSON normalization, and byte-preserving plain text;
-- separate path, decoded query, and normalized header parameter maps;
-- required OpenAPI parameters and bodies with scalar constraints and top-level
-  body type validation;
-- OpenAPI-discovered routes with literal and whole-segment parameter matching;
-- static-segment precedence and captured path parameters;
-- health plus list, read, create, and delete users from the example contract;
-- JSON and YAML response serialization with basic quality and wildcard
-  negotiation;
-- central `400`, `404`, `405`, `406`, `413`, `415`, `500`, and `501` responses;
-- operation-level `x-middlewares` with `requestId` and `logging`;
-- stable `X-Request-Id` correlation and one JSON request log on stderr;
-- `Connection: close` on every response.
+Those choices make the code easier to inspect, but they also make the project
+unsuitable for production use.
 
-See [`docs/`](docs/README.md) for architecture, exact protocol behavior,
-technical decisions, and the phased roadmap.
+## More detail
+
+- [Architecture](docs/architecture.md) explains the runtime, its components,
+  and the repository structure.
+- [Supported HTTP subset](docs/http-subset.md) describes the exact protocol and
+  OpenAPI behavior.
+- [Development](docs/development.md) covers native setup, CLI commands, tests,
+  and other development tasks.
+
+## License
+
+This project is available under the [MIT License](LICENSE).
