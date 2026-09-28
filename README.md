@@ -1,9 +1,13 @@
 # bash-http-lab
 
-`bash-http-lab` is a deliberately small HTTP/1.1 server written in Bash. It is
-an educational experiment that makes the work normally hidden by web
-frameworks visible: parsing a request, matching an OpenAPI operation, validating
-input, running middleware, invoking a handler, and building a response.
+`bash-http-lab` started as a small experiment: I wanted to see what it would
+look like to build, in plain Bash, the pieces that a web framework normally
+provides.
+
+The result is a deliberately small HTTP/1.1 server that parses requests, matches
+OpenAPI operations, validates input, runs middleware, invokes handlers, and
+builds responses. It is meant for learning and exploration rather than as a
+replacement for a real web framework.
 
 It is not production-ready and must not be exposed to untrusted networks.
 

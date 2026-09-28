@@ -25,22 +25,22 @@ an incorrect result.
 
 ## System context
 
-```text
-HTTP client
-    |
-    v
-socat TCP listener
-    |
-    | stdin/stdout for one connection
-    v
-Bash connection process
-    |
-    +-> request parser
-    +-> OpenAPI adapter and router
-    +-> validation
-    +-> middleware
-    +-> handler
-    +-> response builder
+```mermaid
+flowchart LR
+    client[HTTP client] -->|HTTP request over TCP| listener[socat TCP listener]
+
+    subgraph process[One Bash process per connection]
+        direction LR
+        parser[Request parser] --> openapi[OpenAPI adapter and router]
+        openapi --> validation[Validation]
+        validation --> middleware[Middleware]
+        middleware --> handler[Handler]
+        handler --> response[Response builder]
+    end
+
+    listener -->|request through stdin| parser
+    response -->|response through stdout| listener
+    listener -->|HTTP response| client
 ```
 
 `socat` owns TCP concerns and starts one Bash process for each accepted
@@ -70,28 +70,39 @@ no production concurrency controls.
 ## Repository structure
 
 ```text
-bin/bash-http             Public CLI entry point
-lib/dependencies.sh       Command-specific dependency checks
-lib/server.sh             Listener and connection orchestration
-lib/request.sh            HTTP request parsing
-lib/response.sh           Response construction and negotiation
-lib/errors.sh             Central HTTP error responses
-lib/openapi.sh            OpenAPI loading and route discovery
-lib/router.sh             Route matching and handler resolution
-lib/params.sh             Path, query, and header parameter context
-lib/body.sh               Request body storage and normalization
-lib/validation.sh         Supported schema validation
-lib/middleware.sh         Synchronous middleware pipeline
-lib/generator.sh          Non-destructive handler generation
-handlers/                 Example API handlers and JSON data access
-middleware/               Request ID and logging middleware
-data/users.json           Example API data
-tests/unit/               Module-level behavior tests
-tests/integration/        Real listener and client tests
-openapi.yaml              Bundled application contract
-Dockerfile                Runtime and test image targets
-compose.yaml              Local sandbox orchestration
-Makefile                  Developer interface
+.
+├── bin/
+│   └── bash-http              # Public CLI entry point
+├── lib/                       # HTTP and OpenAPI runtime
+│   ├── dependencies.sh
+│   ├── server.sh
+│   ├── request.sh
+│   ├── response.sh
+│   ├── errors.sh
+│   ├── openapi.sh
+│   ├── router.sh
+│   ├── params.sh
+│   ├── body.sh
+│   ├── validation.sh
+│   ├── middleware.sh
+│   └── generator.sh
+├── handlers/                  # Example API handlers and data access
+├── middleware/                # Request ID and logging middleware
+├── data/
+│   └── users.json             # Example API data
+├── tests/
+│   ├── unit/                  # Module-level behavior tests
+│   ├── integration/           # Real listener and client tests
+│   └── fixtures/              # OpenAPI and handler test fixtures
+├── docs/
+│   ├── architecture.md
+│   └── http-subset.md
+├── .github/
+│   └── workflows/             # Continuous integration
+├── openapi.yaml               # Bundled application contract
+├── Dockerfile                 # Runtime and test image targets
+├── compose.yaml               # Local sandbox orchestration
+└── Makefile                   # Developer interface
 ```
 
 The filenames describe responsibilities, not object-oriented abstractions.
