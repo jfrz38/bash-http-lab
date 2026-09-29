@@ -31,6 +31,8 @@ docker compose up --build --wait server
 curl http://127.0.0.1:8080/health
 ```
 
+Compose publishes the server on host loopback only.
+
 You should get:
 
 ```json
@@ -65,7 +67,8 @@ the input, running middleware, and building the response.
 ## Deliberate shortcuts
 
 - each connection handles one request and then closes;
-- native runs store users in `data/users.json` by default;
+- native runs copy `data/users.seed.json` to the ignored runtime file
+  `data/users.json` on first use;
 - the JSON backend does not coordinate concurrent writes;
 - only a documented subset of HTTP, OpenAPI, and JSON Schema is supported.
 
