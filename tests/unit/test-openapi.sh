@@ -8,6 +8,18 @@ source "$ROOT_DIR/tests/test-helper.sh"
 # shellcheck source=../../lib/openapi.sh
 source "$ROOT_DIR/lib/openapi.sh"
 
+assert_openapi_rejected() {
+	local fixture=$1
+	local expected_status=$2
+	local expected_error=$3
+	local status
+
+	openapi_load_routes "$ROOT_DIR/tests/fixtures/$fixture"
+	status=$?
+	assert_equal "$expected_status" "$status"
+	assert_contains "$OPENAPI_ERROR" "$expected_error"
+}
+
 test_loads_users_routes_and_examples() {
 	local status
 	openapi_load_routes "$ROOT_DIR/openapi.yaml"
@@ -142,6 +154,35 @@ test_requires_path_parameter_declarations() {
 	assert_contains "$OPENAPI_ERROR" "Path parameter 'itemId' is not declared"
 }
 
+test_rejects_unwritable_response_statuses() {
+	assert_openapi_rejected 'unsupported-response-status-202.yaml' "$OPENAPI_UNSUPPORTED" "Unsupported response status '202'"
+	assert_openapi_rejected 'unsupported-response-status-204.yaml' "$OPENAPI_UNSUPPORTED" "Unsupported response status '204'"
+	assert_openapi_rejected 'unsupported-response-status-301.yaml' "$OPENAPI_UNSUPPORTED" "Unsupported response status '301'"
+}
+
+test_rejects_methods_with_unimplemented_semantics() {
+	assert_openapi_rejected 'unsupported-head-method.yaml' "$OPENAPI_UNSUPPORTED" "Unsupported HTTP method 'head'"
+	assert_openapi_rejected 'unsupported-trace-method.yaml' "$OPENAPI_UNSUPPORTED" "Unsupported HTTP method 'trace'"
+}
+
+test_rejects_ignored_behavioral_fields() {
+	assert_openapi_rejected 'unsupported-root-security.yaml' "$OPENAPI_UNSUPPORTED" "Unsupported OpenAPI root field 'security'"
+	assert_openapi_rejected 'unsupported-operation-security.yaml' "$OPENAPI_UNSUPPORTED" "Unsupported operation field 'security'"
+	assert_openapi_rejected 'unsupported-callbacks.yaml' "$OPENAPI_UNSUPPORTED" "Unsupported operation field 'callbacks'"
+}
+
+test_requires_nonempty_responses() {
+	assert_openapi_rejected 'empty-responses.yaml' "$OPENAPI_INVALID" 'must define at least one response'
+}
+
+test_rejects_impossible_plain_text_schemas() {
+	assert_openapi_rejected 'invalid-text-schema.yaml' "$OPENAPI_UNSUPPORTED" "Unsupported schema type 'integer'"
+}
+
+test_rejects_unsupported_response_media_types() {
+	assert_openapi_rejected 'unsupported-response-media.yaml' "$OPENAPI_UNSUPPORTED" "Unsupported response media type 'application/xml'"
+}
+
 run_test 'loads routes and response examples from the users contract' test_loads_users_routes_and_examples
 run_test 'selects mock examples deterministically' test_selects_mock_examples_deterministically
 run_test 'rejects external response examples' test_rejects_external_response_examples
@@ -156,4 +197,10 @@ run_test 'rejects duplicate middleware declarations' test_rejects_duplicate_midd
 run_test 'requires middleware declarations to be a sequence' test_rejects_malformed_middleware_list
 run_test 'rejects unsupported response status keys' test_rejects_unsupported_response_status
 run_test 'requires response declarations to be mappings' test_rejects_malformed_response
+run_test 'rejects response statuses the writer cannot emit' test_rejects_unwritable_response_statuses
+run_test 'rejects methods with unimplemented HTTP semantics' test_rejects_methods_with_unimplemented_semantics
+run_test 'rejects ignored behavioral OpenAPI fields' test_rejects_ignored_behavioral_fields
+run_test 'requires each operation to declare a response' test_requires_nonempty_responses
+run_test 'rejects impossible plain text schemas' test_rejects_impossible_plain_text_schemas
+run_test 'rejects unsupported response media types' test_rejects_unsupported_response_media_types
 finish_tests

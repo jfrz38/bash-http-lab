@@ -29,7 +29,7 @@ test_missing_openapi_file() {
 test_validate_openapi_file() {
 	local output
 	output=$(bash "$ROOT_DIR/bin/bash-http" validate "$ROOT_DIR/openapi.yaml")
-	assert_equal 'OpenAPI document is valid.' "$output"
+	assert_equal 'OpenAPI document matches the supported subset.' "$output"
 }
 
 test_lists_openapi_routes() {

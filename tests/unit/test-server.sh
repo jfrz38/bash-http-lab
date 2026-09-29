@@ -35,6 +35,11 @@ source "$ROOT_DIR/lib/server.sh"
 source "$ROOT_DIR/handlers/users-repository.sh"
 users_repository_load
 
+TEST_USERS_FILE=$(mktemp)
+cp "$ROOT_DIR/data/users.seed.json" "$TEST_USERS_FILE"
+export BASH_HTTP_USERS_FILE=$TEST_USERS_FILE
+trap 'rm -f "$TEST_USERS_FILE"' EXIT
+
 request_connection() {
 	local output_file
 	local openapi_file=${2:-$ROOT_DIR/openapi.yaml}
@@ -73,7 +78,7 @@ test_users_route() {
 test_creates_and_deletes_user() {
 	local users_file
 	users_file=$(mktemp)
-	cp "$ROOT_DIR/data/users.json" "$users_file"
+	cp "$ROOT_DIR/data/users.seed.json" "$users_file"
 	BASH_HTTP_USERS_FILE=$users_file request_connection $'POST /users HTTP/1.1\r\nContent-Length: 20\r\nContent-Type: application/json\r\n\r\n{"name":"Katherine"}'
 	assert_contains "$CONNECTION_RESPONSE" 'HTTP/1.1 201 Created'
 	assert_contains "$CONNECTION_RESPONSE" '"id":3'

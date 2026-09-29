@@ -33,13 +33,16 @@ start_test_server() {
 
 	local attempt
 	for ((attempt = 1; attempt <= 100; attempt += 1)); do
-		if curl --silent --max-time "$TEST_REQUEST_TIMEOUT_SECONDS" "$TEST_BASE_URL/health" >/dev/null 2>&1; then
-			return 0
-		fi
 		if ! kill -0 "$SERVER_PID" 2>/dev/null; then
 			printf 'Server exited during startup:\n' >&2
 			cat "$TEST_TMP_DIR/server.stderr" >&2
 			return 1
+		fi
+		if curl --silent --max-time "$TEST_REQUEST_TIMEOUT_SECONDS" \
+			--dump-header "$TEST_TMP_DIR/readiness.headers" \
+			--output /dev/null "$TEST_BASE_URL/health" 2>/dev/null &&
+			[[ $(<"$TEST_TMP_DIR/readiness.headers") == *$'Connection: close\r'* ]]; then
+			return 0
 		fi
 		sleep 0.1
 	done
@@ -246,7 +249,7 @@ test_rejects_premature_body_eof() {
 }
 
 export BASH_HTTP_USERS_FILE="$TEST_TMP_DIR/users.json"
-cp "$ROOT_DIR/data/users.json" "$BASH_HTTP_USERS_FILE"
+cp "$ROOT_DIR/data/users.seed.json" "$BASH_HTTP_USERS_FILE"
 start_test_server
 run_test 'serves the exact health response' test_health_response
 run_test 'serializes a structured result as YAML' test_yaml_response
@@ -267,6 +270,7 @@ run_test 'creates, reads, and deletes a user through SQLite' test_user_lifecycle
 run_test 'does not reseed SQLite after initialization' test_sqlite_initialization_does_not_reseed
 stop_test_server
 unset BASH_HTTP_USERS_BACKEND BASH_HTTP_USERS_SQLITE_FILE
+export BASH_HTTP_USERS_BACKEND=invalid
 start_test_server "$ROOT_DIR/tests/fixtures/body-routing.yaml"
 run_test 'accepts a valid JSON body over the network' test_accepts_valid_json_body
 run_test 'rejects malformed JSON over the network' test_rejects_malformed_json_body
@@ -275,6 +279,7 @@ run_test 'returns 415 for unsupported request media' test_rejects_unsupported_me
 run_test 'returns 413 for an oversized declared body' test_rejects_oversized_declared_body
 run_test 'returns 400 for premature request-body EOF' test_rejects_premature_body_eof
 stop_test_server
+unset BASH_HTTP_USERS_BACKEND
 start_test_server "$ROOT_DIR/openapi.yaml" mock
 run_test 'serves documented examples without handlers in mock mode' test_mock_response_without_handlers
 finish_tests

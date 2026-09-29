@@ -12,13 +12,13 @@ services:
       - /tmp
     environment:
       BASH_HTTP_USERS_BACKEND: sqlite
-      BASH_HTTP_USERS_SQLITE_FILE: /workspace/data/users.sqlite
+      BASH_HTTP_USERS_SQLITE_FILE: /workspace/runtime/users.sqlite
     volumes:
-      - users-data:/workspace/data
+      - users-data:/workspace/runtime
     security_opt:
       - no-new-privileges:true
     ports:
-      - "${PORT:-8080}:8080"
+      - "127.0.0.1:${PORT:-8080}:8080"
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/health"]
       interval: 2s
