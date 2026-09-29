@@ -17,7 +17,7 @@ the internet.
 - an OpenAPI document defining the available routes;
 - validation, middleware, and handlers implemented as shell scripts;
 - JSON and YAML responses;
-- a tiny users API backed by a JSON file.
+- a tiny users API with interchangeable JSON and SQLite persistence.
 
 It deliberately supports only a small part of HTTP and OpenAPI. That keeps the
 experiment understandable and, more importantly, finite.
@@ -65,8 +65,8 @@ the input, running middleware, and building the response.
 ## Deliberate shortcuts
 
 - each connection handles one request and then closes;
-- the example API stores users in `data/users.json`;
-- concurrent writes are not coordinated;
+- native runs store users in `data/users.json` by default;
+- the JSON backend does not coordinate concurrent writes;
 - only a documented subset of HTTP, OpenAPI, and JSON Schema is supported.
 
 Those choices make the code easier to inspect, but they also make the project

@@ -30,13 +30,14 @@ Linux and WSL are supported. The runtime requires:
 - Bash 5.2 or newer;
 - `socat`;
 - `jq`;
+- `sqlite3` when using the SQLite users backend or running all tests;
 - [Mike Farah `yq`](https://github.com/mikefarah/yq/releases) version 4.
 
 On Ubuntu 24.04, install the packaged dependencies with:
 
 ```bash
 sudo apt-get update
-sudo apt-get install bash curl jq make shellcheck shfmt socat
+sudo apt-get install bash curl jq make shellcheck shfmt socat sqlite3
 ```
 
 Install `yq` from its official releases and verify that `yq --version` reports
@@ -56,6 +57,21 @@ Select another address when needed:
 
 Hosts must be IPv4 addresses or DNS hostnames. Ports must be integers from 1 to
 65535.
+
+The example users API uses JSON persistence by default. Select SQLite and an
+alternate database path with:
+
+```bash
+BASH_HTTP_USERS_BACKEND=sqlite \
+BASH_HTTP_USERS_SQLITE_FILE=/tmp/bash-http-users.sqlite \
+  ./bin/bash-http serve openapi.yaml
+```
+
+`BASH_HTTP_USERS_BACKEND` accepts only `json` or `sqlite`. JSON storage can be
+redirected with `BASH_HTTP_USERS_FILE`; otherwise it uses `data/users.json`.
+SQLite defaults to `data/users.sqlite` and creates its schema and initial data
+when `serve` starts. Docker Compose selects SQLite explicitly and persists that
+file in the `users-data` volume.
 
 ## CLI
 

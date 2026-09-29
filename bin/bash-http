@@ -32,6 +32,8 @@ source "$ROOT_DIR/lib/router.sh"
 source "$ROOT_DIR/lib/server.sh"
 # shellcheck source=../lib/generator.sh
 source "$ROOT_DIR/lib/generator.sh"
+# shellcheck source=../handlers/users-repository.sh
+source "$ROOT_DIR/handlers/users-repository.sh"
 
 print_help() {
 	cat <<'EOF'
@@ -101,6 +103,16 @@ server_command() {
 	fi
 	require_command jq || return 1
 	require_command socat || return 1
+	if [[ $command == 'serve' ]]; then
+		users_repository_load || return 1
+		if [[ ${BASH_HTTP_USERS_BACKEND:-json} == 'sqlite' ]]; then
+			require_command sqlite3 || return 1
+		fi
+		if ! users_repository_initialize; then
+			printf 'Unable to initialize the %s users backend.\n' "${BASH_HTTP_USERS_BACKEND:-json}" >&2
+			return 1
+		fi
+	fi
 	start_server "$host" "$port" "$ROOT_DIR/bin/bash-http" "$openapi_file" "$command"
 }
 
@@ -164,6 +176,12 @@ main() {
 		fi
 		require_yq_v4 || return 1
 		require_command jq || return 1
+		if [[ $2 == 'serve' ]]; then
+			users_repository_load || return 1
+			if [[ ${BASH_HTTP_USERS_BACKEND:-json} == 'sqlite' ]]; then
+				require_command sqlite3 || return 1
+			fi
+		fi
 		trap body_cleanup EXIT INT TERM
 		handle_connection "$1" "$ROOT_DIR/handlers" "$2"
 		;;

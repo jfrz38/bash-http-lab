@@ -3,7 +3,7 @@
 SHELL := bash
 .SHELLFLAGS := -eu -o pipefail -c
 
-BASH_FILES := bin/bash-http $(wildcard lib/*.sh) $(wildcard middleware/*.sh) $(wildcard handlers/*.sh) $(wildcard tests/*.sh) $(wildcard tests/unit/*.sh) $(wildcard tests/integration/*.sh) $(wildcard tests/fixtures/handlers/*.sh)
+BASH_FILES := bin/bash-http $(wildcard lib/*.sh) $(wildcard middleware/*.sh) $(wildcard handlers/*.sh) $(wildcard handlers/persistence/*.sh) $(wildcard tests/*.sh) $(wildcard tests/unit/*.sh) $(wildcard tests/integration/*.sh) $(wildcard tests/fixtures/handlers/*.sh)
 HOST ?= 127.0.0.1
 PORT ?= 8080
 OPENAPI_FILE ?= openapi.yaml
@@ -20,7 +20,7 @@ test-unit: ## Run unit tests
 	@for test_file in tests/unit/test-*.sh; do bash "$$test_file"; done
 
 test-integration: ## Run integration tests (requires curl and socat)
-	@bash tests/integration/test-server.sh
+	@for test_file in tests/integration/test-*.sh; do bash "$$test_file"; done
 
 .PHONY: lint format format-check
 lint: ## Run ShellCheck
