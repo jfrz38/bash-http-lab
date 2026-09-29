@@ -86,7 +86,8 @@ no production concurrency controls.
 │   ├── validation.sh
 │   ├── middleware.sh
 │   └── generator.sh
-├── handlers/                  # Example API handlers and data access
+├── handlers/                  # Example API handlers and persistence port
+│   └── persistence/           # JSON and SQLite adapters
 ├── middleware/                # Request ID and logging middleware
 ├── data/
 │   └── users.json             # Example API data
@@ -138,6 +139,7 @@ dependencies required by the selected command, and delegates to library
 functions. It contains no endpoint behavior or HTTP parsing.
 
 Serving and mocking require Bash, `socat`, `jq`, and Mike Farah `yq` v4.
+The SQLite users backend additionally requires `sqlite3`.
 OpenAPI inspection and handler generation require `yq` but not the listener.
 Development checks additionally use `curl`, GNU Make, ShellCheck, and shfmt.
 
@@ -243,14 +245,26 @@ diagnostic on stderr.
 
 ## Example persistence
 
-The users example reads and writes `data/users.json`. Updates are rendered to a
-temporary file in the same directory and renamed over the data file, preventing
-readers from observing a partially written document.
+The users handlers depend on the operations in `handlers/users-repository.sh`,
+not on a storage format. The CLI is the composition root: it selects a trusted
+adapter from `BASH_HTTP_USERS_BACKEND`, verifies its functions, and initializes
+it once before the listener forks. Connection processes load the same adapter
+without repeating initialization.
 
-There is no locking, versioning, or transaction support. Concurrent creates or
-deletes can read the same prior state, allocate the same ID, or overwrite an
-update. Compose mounts `/workspace/data` as a writable named volume while
-keeping the rest of the runtime filesystem read-only.
+The `json` adapter is the native default and stores users in `data/users.json`.
+Updates are rendered to a temporary file in the same directory and renamed over
+the data file, preventing readers from observing a partially written document.
+It has no locking, versioning, or transaction support, so concurrent writes can
+still overwrite one another.
+
+The `sqlite` adapter stores each complete JSON user document while using an
+SQLite-generated identifier. Its creates and deletes use transactions and wait
+for a bounded period when the database is busy. Schema creation and initial
+Ada/Grace data are idempotent; deleting those rows does not cause them to be
+seeded again at the next startup. Client JSON is encoded before it enters SQL.
+
+Compose selects SQLite and mounts `/workspace/data` as a writable named volume
+while keeping the rest of the runtime filesystem read-only.
 
 ## Development sandbox
 

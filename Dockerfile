@@ -7,6 +7,7 @@ ARG CA_CERTIFICATES_PACKAGE_VERSION=20250419~deb12u1
 ARG CURL_PACKAGE_VERSION=7.88.1-10+deb12u15
 ARG JQ_PACKAGE_VERSION=1.6-2.1+deb12u2
 ARG SOCAT_PACKAGE_VERSION=1.7.4.4-2
+ARG SQLITE_PACKAGE_VERSION=3.40.1-2+deb12u2
 
 RUN apt-get update \
 	&& apt-get install --yes --no-install-recommends \
@@ -15,6 +16,7 @@ RUN apt-get update \
 		curl="${CURL_PACKAGE_VERSION}" \
 		jq="${JQ_PACKAGE_VERSION}" \
 		socat="${SOCAT_PACKAGE_VERSION}" \
+		sqlite3="${SQLITE_PACKAGE_VERSION}" \
 	&& rm -rf /var/lib/apt/lists/* \
 	&& case "$TARGETARCH" in \
 		amd64) yq_sha256='c5f056448f973ae7d39b5401949648a78f2dc1947d6a8eb65be60d5c504b9385' ;; \

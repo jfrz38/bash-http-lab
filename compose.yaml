@@ -10,6 +10,9 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+    environment:
+      BASH_HTTP_USERS_BACKEND: sqlite
+      BASH_HTTP_USERS_SQLITE_FILE: /workspace/data/users.sqlite
     volumes:
       - users-data:/workspace/data
     security_opt:

@@ -31,6 +31,9 @@ source "$ROOT_DIR/lib/middleware.sh"
 source "$ROOT_DIR/lib/router.sh"
 # shellcheck source=../../lib/server.sh
 source "$ROOT_DIR/lib/server.sh"
+# shellcheck source=../../handlers/users-repository.sh
+source "$ROOT_DIR/handlers/users-repository.sh"
+users_repository_load
 
 request_connection() {
 	local output_file
@@ -232,6 +235,19 @@ test_oversized_body() {
 	assert_contains "$actual" 'HTTP/1.1 413 Content Too Large'
 }
 
+test_rejects_unknown_users_backend() {
+	local error_file status
+
+	error_file=$(mktemp)
+	set +e
+	BASH_HTTP_USERS_BACKEND=unknown users_repository_load 2>"$error_file"
+	status=$?
+	set -e
+	assert_equal '1' "$status"
+	assert_contains "$(<"$error_file")" 'Unsupported users backend: unknown.'
+	rm -f "$error_file"
+}
+
 run_test 'routes GET /health' test_health_route
 run_test 'ignores the query string for routing' test_health_query_route
 run_test 'routes a captured user identifier' test_users_route
@@ -252,4 +268,5 @@ run_test 'returns 400 for a missing required parameter' test_missing_required_pa
 run_test 'returns 400 for an invalid OpenAPI body' test_invalid_openapi_body_is_bad_request
 run_test 'returns 415 for unsupported request media' test_unsupported_media_type
 run_test 'returns 413 before reading an oversized body' test_oversized_body
+run_test 'rejects an unknown users repository backend' test_rejects_unknown_users_backend
 finish_tests

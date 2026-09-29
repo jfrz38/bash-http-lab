@@ -159,10 +159,11 @@ test_user_response() {
 }
 
 test_user_lifecycle() {
-	perform_body_request 'application/json' '{"name":"Katherine Johnson"}' '/users'
+	perform_body_request 'application/json' '{"name":"Katherine Johnson","role":"engineer"}' '/users'
 	assert_equal '201' "$HTTP_STATUS"
 	assert_equal '3' "$(jq --raw-output '.id' <<<"$RESPONSE_BODY")"
 	assert_equal 'Katherine Johnson' "$(jq --raw-output '.name' <<<"$RESPONSE_BODY")"
+	assert_equal 'engineer' "$(jq --raw-output '.role' <<<"$RESPONSE_BODY")"
 
 	perform_request GET '/users/3'
 	assert_equal '200' "$HTTP_STATUS"
@@ -173,6 +174,15 @@ test_user_lifecycle() {
 	assert_equal 'true' "$(jq --raw-output '.deleted' <<<"$RESPONSE_BODY")"
 
 	perform_request GET '/users/3'
+	assert_equal '404' "$HTTP_STATUS"
+}
+
+test_sqlite_initialization_does_not_reseed() {
+	perform_request DELETE '/users/1'
+	assert_equal '200' "$HTTP_STATUS"
+	stop_test_server
+	start_test_server
+	perform_request GET '/users/1'
 	assert_equal '404' "$HTTP_STATUS"
 }
 
@@ -250,6 +260,13 @@ run_test 'returns 405 and Allow for an unsupported health method' test_method_no
 run_test 'correlates request context, response header, and JSON log' test_request_id_and_log_correlation
 run_test 'keeps listener diagnostics out of stdout' test_diagnostics_do_not_reach_stdout
 stop_test_server
+export BASH_HTTP_USERS_BACKEND=sqlite
+export BASH_HTTP_USERS_SQLITE_FILE="$TEST_TMP_DIR/users.sqlite"
+start_test_server
+run_test 'creates, reads, and deletes a user through SQLite' test_user_lifecycle
+run_test 'does not reseed SQLite after initialization' test_sqlite_initialization_does_not_reseed
+stop_test_server
+unset BASH_HTTP_USERS_BACKEND BASH_HTTP_USERS_SQLITE_FILE
 start_test_server "$ROOT_DIR/tests/fixtures/body-routing.yaml"
 run_test 'accepts a valid JSON body over the network' test_accepts_valid_json_body
 run_test 'rejects malformed JSON over the network' test_rejects_malformed_json_body
