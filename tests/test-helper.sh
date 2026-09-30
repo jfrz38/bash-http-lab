@@ -2,6 +2,7 @@
 
 TESTS_RUN=0
 TESTS_FAILED=0
+TEST_ASSERTION_FAILED=0
 
 assert_equal() {
 	local expected=$1
@@ -10,6 +11,7 @@ assert_equal() {
 
 	if [[ $expected != "$actual" ]]; then
 		printf '  %s\n  expected: %q\n  actual:   %q\n' "$message" "$expected" "$actual" >&2
+		TEST_ASSERTION_FAILED=1
 		return 1
 	fi
 }
@@ -21,6 +23,7 @@ assert_contains() {
 
 	if [[ $haystack != *"$needle"* ]]; then
 		printf '  %s\n  missing: %q\n  value:   %q\n' "$message" "$needle" "$haystack" >&2
+		TEST_ASSERTION_FAILED=1
 		return 1
 	fi
 }
@@ -39,10 +42,18 @@ assert_status() {
 
 run_test() {
 	local name=$1
+	local test_status
 	shift
 
 	((TESTS_RUN += 1))
+	TEST_ASSERTION_FAILED=0
 	if "$@"; then
+		test_status=0
+	else
+		test_status=$?
+	fi
+
+	if ((test_status == 0 && TEST_ASSERTION_FAILED == 0)); then
 		printf 'ok %s - %s\n' "$TESTS_RUN" "$name"
 	else
 		printf 'not ok %s - %s\n' "$TESTS_RUN" "$name"

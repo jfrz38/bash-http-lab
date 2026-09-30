@@ -54,8 +54,8 @@ no production concurrency controls.
 ## Invariants
 
 1. Bash is the application runtime.
-2. HTTP response bytes are the only data written to stdout while handling a
-   connection.
+2. Bundled middleware and handlers reserve stdout for HTTP response bytes while
+   handling a connection; custom scripts must follow the same rule.
 3. Logs, warnings, and diagnostics are written to stderr.
 4. Client-controlled data is never evaluated as shell code or interpolated
    into a command string.
@@ -90,7 +90,7 @@ no production concurrency controls.
 │   └── persistence/           # JSON and SQLite adapters
 ├── middleware/                # Request ID and logging middleware
 ├── data/
-│   └── users.json             # Example API data
+│   └── users.seed.json        # Immutable example API seed
 ├── tests/
 │   ├── unit/                  # Module-level behavior tests
 │   ├── integration/           # Real listener and client tests
@@ -134,7 +134,7 @@ serialization logic.
 
 ### CLI and dependencies
 
-`bin/bash-http` parses commands and trusted options, checks only the
+`bin/bash-http` parses commands and trusted options, checks the non-standard
 dependencies required by the selected command, and delegates to library
 functions. It contains no endpoint behavior or HTTP parsing.
 
@@ -142,6 +142,8 @@ Serving and mocking require Bash, `socat`, `jq`, and Mike Farah `yq` v4.
 The SQLite users backend additionally requires `sqlite3`.
 OpenAPI inspection and handler generation require `yq` but not the listener.
 Development checks additionally use `curl`, GNU Make, ShellCheck, and shfmt.
+Native execution also assumes the standard utilities normally present in a
+Linux userland.
 
 ### Transport
 
@@ -214,8 +216,9 @@ normalized request context and select structured response data. They do not:
 - perform route matching;
 - calculate framing headers.
 
-The generator uses the same validated operation identifiers and creates only
-missing handler scripts. It has no overwrite mode.
+The generator uses the same validated operation identifiers and skips handler
+paths that exist when checked. It has no overwrite option, but concurrent
+generator runs are outside its guarantees.
 
 ### Response builder
 
@@ -246,14 +249,17 @@ diagnostic on stderr.
 ## Example persistence
 
 The users handlers depend on the operations in `handlers/users-repository.sh`,
-not on a storage format. The CLI is the composition root: it selects a trusted
-adapter from `BASH_HTTP_USERS_BACKEND`, verifies its functions, and initializes
-it once before the listener forks. Connection processes load the same adapter
-without repeating initialization.
+not on a storage format. The CLI is the composition root: when a document uses
+one of the bundled users operation IDs, it selects a trusted adapter from
+`BASH_HTTP_USERS_BACKEND`, verifies its functions, and initializes it once
+before the listener forks. Connection processes load the same adapter without
+repeating initialization. Documents without those operations do not load a
+users backend.
 
-The `json` adapter is the native default and stores users in `data/users.json`.
-Updates are rendered to a temporary file in the same directory and renamed over
-the data file, preventing readers from observing a partially written document.
+The `json` adapter is the native default. On first use it copies the immutable
+`data/users.seed.json` into the ignored runtime file `data/users.json`. Updates
+are rendered to a temporary file in the same directory and renamed over the
+runtime file, preventing readers from observing a partially written document.
 It has no locking, versioning, or transaction support, so concurrent writes can
 still overwrite one another.
 
@@ -263,15 +269,17 @@ for a bounded period when the database is busy. Schema creation and initial
 Ada/Grace data are idempotent; deleting those rows does not cause them to be
 seeded again at the next startup. Client JSON is encoded before it enters SQL.
 
-Compose selects SQLite and mounts `/workspace/data` as a writable named volume
+Compose selects SQLite and mounts `/workspace/runtime` as a writable named volume
 while keeping the rest of the runtime filesystem read-only.
 
 ## Development sandbox
 
 The multi-stage Dockerfile builds a runtime image and a test image from the
-same pinned Debian base. The runtime image contains the application and runtime
-tools. The test image adds Make, ShellCheck, shfmt, and the test suite. Both run
-as an unprivileged user.
+same digest-pinned Debian base. The runtime image contains the application and
+runtime tools. The test image adds Make, ShellCheck, shfmt, and the test suite.
+Both run as an unprivileged user. Package versions and downloaded tool hashes
+are pinned, but Debian's mutable APT repositories prevent a permanent
+bit-for-bit reproducibility guarantee.
 
 Compose applies a read-only root filesystem, a temporary `/tmp`,
 `no-new-privileges`, and a healthcheck against `GET /health`.

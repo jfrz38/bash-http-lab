@@ -1,0 +1,12 @@
+openapi: 3.0.3
+info:
+  title: Unsupported root security fixture
+  version: 1.0.0
+security: []
+paths:
+  /health:
+    get:
+      operationId: health
+      responses:
+        '200':
+          description: Healthy

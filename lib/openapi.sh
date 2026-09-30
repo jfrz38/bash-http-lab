@@ -61,8 +61,7 @@ openapi_load_response_example() {
 	local operation_id=$4
 	local status=$5
 	local context="$method $path response $status"
-	local content_tag media_type media_tag has_example examples_tag example_names example_name example_record example_tag value
-	local -a media_types=('application/json' 'application/yaml' 'text/yaml')
+	local content_tag media_types media_type media_tag media_keys media_key has_example examples_tag example_names example_name example_record example_tag value
 
 	content_tag=$(OPENAPI_PATH=$path OPENAPI_KEY=$method OPENAPI_STATUS=$status yq eval '.paths[strenv(OPENAPI_PATH)][strenv(OPENAPI_KEY)].responses[strenv(OPENAPI_STATUS)].content | tag' "$file" </dev/null 2>/dev/null) || return "$OPENAPI_INVALID"
 	[[ $content_tag != '!!null' ]] || return 0
@@ -71,13 +70,32 @@ openapi_load_response_example() {
 		return
 	fi
 
-	for media_type in "${media_types[@]}"; do
+	media_types=$(OPENAPI_PATH=$path OPENAPI_KEY=$method OPENAPI_STATUS=$status yq eval '.paths[strenv(OPENAPI_PATH)][strenv(OPENAPI_KEY)].responses[strenv(OPENAPI_STATUS)].content | keys | .[]' "$file" </dev/null 2>/dev/null) || return "$OPENAPI_INVALID"
+	while IFS= read -r media_type; do
+		[[ -n $media_type ]] || continue
+		case $media_type in
+		application/json | application/yaml | text/yaml) ;;
+		*)
+			openapi_fail "Unsupported response media type '$media_type' in $context." "$OPENAPI_UNSUPPORTED"
+			return
+			;;
+		esac
 		media_tag=$(OPENAPI_PATH=$path OPENAPI_KEY=$method OPENAPI_STATUS=$status OPENAPI_MEDIA=$media_type yq eval '.paths[strenv(OPENAPI_PATH)][strenv(OPENAPI_KEY)].responses[strenv(OPENAPI_STATUS)].content[strenv(OPENAPI_MEDIA)] | tag' "$file" </dev/null 2>/dev/null) || return "$OPENAPI_INVALID"
-		[[ $media_tag != '!!null' ]] || continue
 		if [[ $media_tag != '!!map' ]]; then
 			openapi_fail "Response media type '$media_type' in $context must be a mapping." "$OPENAPI_INVALID"
 			return
 		fi
+		media_keys=$(OPENAPI_PATH=$path OPENAPI_KEY=$method OPENAPI_STATUS=$status OPENAPI_MEDIA=$media_type yq eval '.paths[strenv(OPENAPI_PATH)][strenv(OPENAPI_KEY)].responses[strenv(OPENAPI_STATUS)].content[strenv(OPENAPI_MEDIA)] | keys | .[]' "$file" </dev/null 2>/dev/null) || return "$OPENAPI_INVALID"
+		while IFS= read -r media_key; do
+			[[ -n $media_key ]] || continue
+			case $media_key in
+			schema | example | examples) ;;
+			*)
+				openapi_fail "Unsupported response media type field '$media_key' for '$media_type' in $context." "$OPENAPI_UNSUPPORTED"
+				return
+				;;
+			esac
+		done <<<"$media_keys"
 
 		has_example=$(OPENAPI_PATH=$path OPENAPI_KEY=$method OPENAPI_STATUS=$status OPENAPI_MEDIA=$media_type yq eval '.paths[strenv(OPENAPI_PATH)][strenv(OPENAPI_KEY)].responses[strenv(OPENAPI_STATUS)].content[strenv(OPENAPI_MEDIA)] | has("example")' "$file" </dev/null 2>/dev/null) || return "$OPENAPI_INVALID"
 		if [[ $has_example == 'true' ]]; then
@@ -117,12 +135,12 @@ openapi_load_response_example() {
 			OPENAPI_RESPONSE_EXAMPLE_VALUES+=("$value")
 			return 0
 		done <<<"$example_names"
-	done
+	done <<<"$media_types"
 }
 
 openapi_load_responses() {
 	local file=$1
-	local response_records path method operation_id status response_tag
+	local response_records path method operation_id status response_tag response_keys response_key
 
 	# yq, rather than Bash, expands the variables in this expression.
 	# shellcheck disable=SC2016
@@ -132,14 +150,28 @@ openapi_load_responses() {
 	}
 	while IFS=$'\t' read -r path method operation_id status response_tag; do
 		[[ -z $status ]] && continue
-		if [[ ! $status =~ ^[1-5][0-9]{2}$ ]]; then
+		case $status in
+		200 | 201 | 400 | 404 | 405 | 406 | 413 | 415 | 500 | 501) ;;
+		*)
 			openapi_fail "Unsupported response status '$status' in: $method $path" "$OPENAPI_UNSUPPORTED"
 			return
-		fi
+			;;
+		esac
 		if [[ $response_tag != '!!map' ]]; then
 			openapi_fail "OpenAPI response '$status' in $method $path must be a mapping." "$OPENAPI_INVALID"
 			return
 		fi
+		response_keys=$(OPENAPI_PATH=$path OPENAPI_KEY=$method OPENAPI_STATUS=$status yq eval '.paths[strenv(OPENAPI_PATH)][strenv(OPENAPI_KEY)].responses[strenv(OPENAPI_STATUS)] | keys | .[]' "$file" </dev/null 2>/dev/null) || return "$OPENAPI_INVALID"
+		while IFS= read -r response_key; do
+			[[ -n $response_key ]] || continue
+			case $response_key in
+			description | content) ;;
+			*)
+				openapi_fail "Unsupported response field '$response_key' in: $method $path response $status" "$OPENAPI_UNSUPPORTED"
+				return
+				;;
+			esac
+		done <<<"$response_keys"
 		OPENAPI_RESPONSE_OPERATION_IDS+=("$operation_id")
 		OPENAPI_RESPONSE_STATUSES+=("$status")
 		openapi_load_response_example "$file" "$path" "$method" "$operation_id" "$status" || return $?
@@ -632,7 +664,11 @@ openapi_load_request_body() {
 			return
 		fi
 		schema=$(yq eval --output-format=json --indent=0 '.schema' - <<<"$media_record" 2>/dev/null) || return "$OPENAPI_INVALID"
-		openapi_validate_schema "$schema" "request media type '$media_type' in $context" 'string integer number boolean object array' || return $?
+		if [[ $media_key == 'text/plain' ]]; then
+			openapi_validate_schema "$schema" "request media type '$media_type' in $context" 'string' || return $?
+		else
+			openapi_validate_schema "$schema" "request media type '$media_type' in $context" 'string integer number boolean object array' || return $?
+		fi
 		OPENAPI_BODY_OPERATION_IDS+=("$operation_id")
 		OPENAPI_BODY_REQUIRED+=("$required")
 		OPENAPI_BODY_MEDIA_TYPES+=("$media_key")
@@ -642,7 +678,7 @@ openapi_load_request_body() {
 
 openapi_load_routes() {
 	local file=$1
-	local version paths_tag path_records key_records
+	local document_tag root_keys root_key version paths_tag path_records key_records operation_keys operation_key responses_length
 	local path value_tag key operation_tag operation_id responses_tag method signature
 	local -A seen_operation_ids=()
 	local -A signature_paths=()
@@ -652,6 +688,25 @@ openapi_load_routes() {
 		openapi_fail "OpenAPI file is not readable: $file" "$OPENAPI_INVALID"
 		return
 	fi
+	document_tag=$(yq eval 'tag' "$file" </dev/null 2>/dev/null) || {
+		openapi_fail "Unable to parse OpenAPI document: $file" "$OPENAPI_INVALID"
+		return
+	}
+	if [[ $document_tag != '!!map' ]]; then
+		openapi_fail 'OpenAPI document must be a mapping.' "$OPENAPI_INVALID"
+		return
+	fi
+	root_keys=$(yq eval 'keys | .[]' "$file" </dev/null 2>/dev/null) || return "$OPENAPI_INVALID"
+	while IFS= read -r root_key; do
+		[[ -n $root_key ]] || continue
+		case $root_key in
+		openapi | info | paths | tags | externalDocs) ;;
+		*)
+			openapi_fail "Unsupported OpenAPI root field '$root_key'." "$OPENAPI_UNSUPPORTED"
+			return
+			;;
+		esac
+	done <<<"$root_keys"
 
 	version=$(yq eval '.openapi // ""' "$file" </dev/null 2>/dev/null) || {
 		openapi_fail "Unable to parse OpenAPI document: $file" "$OPENAPI_INVALID"
@@ -708,7 +763,7 @@ openapi_load_routes() {
 			[[ -z $key ]] && continue
 			if ! openapi_is_method_key "$key"; then
 				case $key in
-				parameters | summary | description | servers | x-*) continue ;;
+				parameters | summary | description) continue ;;
 				\$ref)
 					openapi_fail "OpenAPI path references are not supported: $path" "$OPENAPI_UNSUPPORTED"
 					return
@@ -719,6 +774,12 @@ openapi_load_routes() {
 					;;
 				esac
 			fi
+			case $key in
+			head | trace)
+				openapi_fail "Unsupported HTTP method '$key' in: $path" "$OPENAPI_UNSUPPORTED"
+				return
+				;;
+			esac
 			operation_tag=$(OPENAPI_PATH=$path OPENAPI_KEY=$key yq eval '.paths[strenv(OPENAPI_PATH)][strenv(OPENAPI_KEY)] | tag' "$file" </dev/null 2>/dev/null) || {
 				openapi_fail "Unable to read OpenAPI operation: $key $path" "$OPENAPI_INVALID"
 				return
@@ -735,6 +796,17 @@ openapi_load_routes() {
 				openapi_fail "OpenAPI operation '$key $path' must be a mapping." "$OPENAPI_INVALID"
 				return
 			fi
+			operation_keys=$(OPENAPI_PATH=$path OPENAPI_KEY=$key yq eval '.paths[strenv(OPENAPI_PATH)][strenv(OPENAPI_KEY)] | keys | .[]' "$file" </dev/null 2>/dev/null) || return "$OPENAPI_INVALID"
+			while IFS= read -r operation_key; do
+				[[ -n $operation_key ]] || continue
+				case $operation_key in
+				tags | summary | description | externalDocs | deprecated | operationId | parameters | requestBody | responses | x-middlewares) ;;
+				*)
+					openapi_fail "Unsupported operation field '$operation_key' in: $key $path" "$OPENAPI_UNSUPPORTED"
+					return
+					;;
+				esac
+			done <<<"$operation_keys"
 			if [[ ! $operation_id =~ ^[a-z][a-z0-9_]*$ ]]; then
 				openapi_fail "Invalid operationId for $key $path: $operation_id" "$OPENAPI_INVALID"
 				return
@@ -745,6 +817,11 @@ openapi_load_routes() {
 			fi
 			if [[ $responses_tag != '!!map' ]]; then
 				openapi_fail "OpenAPI operation '$key $path' must define responses." "$OPENAPI_INVALID"
+				return
+			fi
+			responses_length=$(OPENAPI_PATH=$path OPENAPI_KEY=$key yq eval '.paths[strenv(OPENAPI_PATH)][strenv(OPENAPI_KEY)].responses | length' "$file" </dev/null 2>/dev/null) || return "$OPENAPI_INVALID"
+			if ((responses_length == 0)); then
+				openapi_fail "OpenAPI operation '$key $path' must define at least one response." "$OPENAPI_INVALID"
 				return
 			fi
 			openapi_load_parameters "$file" "$path" "$key" "$operation_id" || return $?

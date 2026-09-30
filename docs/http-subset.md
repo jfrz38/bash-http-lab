@@ -67,7 +67,9 @@ or last-wins behavior.
   Request` because framing is ambiguous for this runtime.
 
 A non-empty body requires `Content-Type`. The media type is compared
-case-insensitively and may contain parameters.
+case-insensitively. This subset accepts zero or more unique parameters written
+as `token=token`, separated by semicolons; malformed or quoted parameters are
+rejected.
 
 | Media type | Internal representation |
 | --- | --- |
@@ -76,9 +78,11 @@ case-insensitively and may contain parameters.
 | `text/yaml`, `text/x-yaml` | JSON file converted by Mike Farah `yq` v4 |
 | `text/plain` | Byte-preserving text file |
 
-Malformed JSON or YAML, an invalid media type, or a non-empty body without
-`Content-Type` returns `400 Bad Request`. A valid but unsupported media type
-returns `415 Unsupported Media Type`.
+JSON bodies must contain exactly one top-level JSON value, and YAML bodies must
+contain exactly one document. Malformed JSON or YAML, multiple values or
+documents, an invalid media type, or a non-empty body without `Content-Type`
+returns `400 Bad Request`. A valid but unsupported media type returns `415
+Unsupported Media Type`.
 
 Raw and normalized bodies are stored in private temporary files and removed on
 every handled exit path. Binary media types and chunked bodies are unsupported.
@@ -120,8 +124,28 @@ The bundled `openapi.yaml` defines this example API:
 | `GET` | `/users/{userId}` | Read one user |
 | `DELETE` | `/users/{userId}` | Delete one user |
 
-Other valid documents may define a different application using the supported
-subset.
+Other documents matching the supported subset may define a different
+application. The users persistence adapter is loaded only when the document
+uses a bundled users operation ID.
+
+### OpenAPI document loading
+
+The CLI validates this runtime's supported OpenAPI 3.0 subset, not full OpenAPI
+conformance. At the document root it accepts `openapi`, `info`, `paths`, `tags`,
+and `externalDocs`. Path items may contain operations, `parameters`, `summary`,
+and `description`.
+
+Supported operation methods are `GET`, `PUT`, `POST`, `DELETE`, `OPTIONS`, and
+`PATCH`. `HEAD` and `TRACE` are rejected because their special HTTP semantics
+are not implemented. Operations may contain `tags`, `summary`, `description`,
+`externalDocs`, `deprecated`, `operationId`, `parameters`, `requestBody`,
+`responses`, and `x-middlewares`. Each operation must declare at least one
+supported response.
+
+Other root, path-item, or operation fields are rejected. This includes
+behavioral features the runtime would otherwise ignore, such as `security`,
+`servers`, and `callbacks`. References and component-based schemas are also
+outside the subset.
 
 ## Request context
 
@@ -152,6 +176,9 @@ Every path placeholder requires a corresponding `required` path parameter.
 | --- | --- |
 | Path, query, or header parameter | `string`, `integer`, `number`, `boolean` |
 | Top-level request body | `string`, `integer`, `number`, `boolean`, `object`, `array` |
+
+`text/plain` request bodies support only a top-level `string` schema because no
+numeric, boolean, object, or array coercion is performed.
 
 Integer and number parameters use JSON number syntax. Boolean parameters must
 be exactly `true` or `false`. Strings remain decoded strings. Object and array
@@ -203,7 +230,8 @@ UUID. The value is exposed to handlers, returned in exactly one
 `X-Request-Id` response header, and included in request logs.
 
 `logging` writes one compact JSON object to stderr after final status selection
-and before serialization. It contains `requestId`, `method`, `path`, numeric
+and representation serialization, but before the response bytes are written.
+It contains `requestId`, `method`, `path`, numeric
 `status`, and non-negative integer `durationMs`. It excludes query values,
 headers, and request bodies. Failures before operation middleware starts do not
 produce this request log.
@@ -243,10 +271,15 @@ body. The response builder guarantees:
 - exactly one response per connection;
 - no diagnostic output on stdout.
 
-The OpenAPI adapter records explicit three-digit response statuses. A handler
-may select an undocumented status, but the runtime writes a development warning
-to stderr. OpenAPI `default` responses and response-schema validation are
-unsupported.
+The OpenAPI adapter accepts only statuses that the response writer can emit:
+`200`, `201`, `400`, `404`, `405`, `406`, `413`, `415`, `500`, and `501`. A
+handler may select an undocumented supported status, but the runtime writes a
+development warning to stderr. OpenAPI `default` responses and response-schema
+validation are unsupported.
+
+Response content declarations are inspected for mock examples. They do not
+restrict live handler negotiation: structured handler output is always offered
+as the runtime's fixed JSON and YAML representations.
 
 ## Central errors
 

@@ -43,10 +43,19 @@ container-build: ## Build runtime and test container images
 	@$(COMPOSE) --profile test build
 
 container-check: ## Run all checks and smoke-test the runtime image in containers
-	@trap '$(COMPOSE) down --remove-orphans >/dev/null 2>&1' EXIT; \
-		$(COMPOSE) --profile test run --build --rm -T test; \
-		$(COMPOSE) up --build --wait server; \
-		$(COMPOSE) exec -T server curl --fail --silent http://127.0.0.1:8080/health >/dev/null
+	@check_project="bash-http-lab-check-$${GITHUB_RUN_ID:-local}-$$$$"; \
+		cleanup() { \
+			status=$$?; \
+			if ((status != 0)); then \
+				$(COMPOSE) --project-name "$$check_project" logs --no-color server >&2 || true; \
+			fi; \
+			$(COMPOSE) --project-name "$$check_project" --profile test down --volumes --remove-orphans >/dev/null 2>&1 || true; \
+			exit "$$status"; \
+		}; \
+		trap cleanup EXIT; \
+		$(COMPOSE) --project-name "$$check_project" --profile test run --build --rm -T test; \
+		$(COMPOSE) --project-name "$$check_project" up --build --wait server; \
+		$(COMPOSE) --project-name "$$check_project" exec -T server curl --fail --silent http://127.0.0.1:8080/health >/dev/null
 
 container-up: ## Start the containerized server (PORT=8080)
 	@$(COMPOSE) up --build --wait server

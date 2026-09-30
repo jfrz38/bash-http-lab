@@ -1,0 +1,31 @@
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+
+# Runtime data
+data/users.json
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+.users.*
+*.log
+
+# Generated output
+build/
+coverage/
+dist/
+tmp/
+
+# Editors, operating systems, and local agents
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.codebase-memory/
+.claude/
+.cursor/
+.opencode/
+.agents/
+.aider*

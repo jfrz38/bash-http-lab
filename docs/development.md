@@ -2,8 +2,9 @@
 
 ## Docker
 
-Docker Engine with the Compose plugin provides reproducible Linux environments
-for both the example server and the complete project checks.
+Docker Engine with the Compose plugin provides controlled Linux environments
+for both the example server and the complete project checks. Docker Compose
+2.17 or newer is required for `up --wait`.
 
 Start the example server with:
 
@@ -17,6 +18,9 @@ Set `PORT` to publish it on a different host port:
 PORT=9090 docker compose up --build --wait server
 ```
 
+Compose always publishes on `127.0.0.1`; changing `PORT` does not expose the
+server on other host interfaces.
+
 Stop the sandbox with:
 
 ```bash
@@ -25,13 +29,15 @@ docker compose down
 
 ## Native setup
 
-Linux and WSL are supported. The runtime requires:
+The runtime is tested on Linux in containers and GitHub Actions. WSL is expected
+to work but is not tested separately. Native execution requires:
 
 - Bash 5.2 or newer;
 - `socat`;
 - `jq`;
 - `sqlite3` when using the SQLite users backend or running all tests;
 - [Mike Farah `yq`](https://github.com/mikefarah/yq/releases) version 4.
+- standard Linux utilities including `coreutils`, `findutils`, and `util-linux`.
 
 On Ubuntu 24.04, install the packaged dependencies with:
 
@@ -68,10 +74,15 @@ BASH_HTTP_USERS_SQLITE_FILE=/tmp/bash-http-users.sqlite \
 ```
 
 `BASH_HTTP_USERS_BACKEND` accepts only `json` or `sqlite`. JSON storage can be
-redirected with `BASH_HTTP_USERS_FILE`; otherwise it uses `data/users.json`.
-SQLite defaults to `data/users.sqlite` and creates its schema and initial data
-when `serve` starts. Docker Compose selects SQLite explicitly and persists that
-file in the `users-data` volume.
+redirected with `BASH_HTTP_USERS_FILE`; otherwise it creates the ignored runtime
+file `data/users.json` from `data/users.seed.json` on first use. SQLite defaults
+to `data/users.sqlite` and creates its schema and initial data when `serve`
+starts. Docker Compose selects SQLite explicitly and persists its database in
+the `users-data` volume.
+
+The CLI composes this repository only when the document declares one of the
+bundled users operation IDs. Unrelated supported documents do not require a
+users backend.
 
 ## CLI
 
@@ -89,7 +100,9 @@ bash-http help
   examples instead of invoking handlers.
 - `routes` lists operations discovered from the document.
 - `validate` checks the supported OpenAPI subset without starting a listener.
-- `generate` creates missing handler files and never overwrites existing files.
+- `generate` skips destinations that already exist when it checks them and
+  creates the remaining handler files. Concurrent generator runs are not
+  supported.
 
 Mock mode chooses the lowest documented `2xx` status containing an example. If
 none exists, it chooses the lowest documented status containing an example. A
@@ -110,7 +123,7 @@ make format             # format scripts with shfmt
 make format-check       # verify formatting
 make check              # run all native checks
 make run                # run the server in the foreground
-make container-check    # run the reproducible CI verification path
+make container-check    # run the containerized CI verification path
 make container-up       # start the sandbox server
 make container-down     # stop and remove sandbox containers
 ```
@@ -118,9 +131,13 @@ make container-down     # stop and remove sandbox containers
 Integration tests accept `TEST_HOST` and `TEST_PORT`. `HOST`, `PORT`, and
 `OPENAPI_FILE` configure `make run`.
 
-Use `make check` when all native dependencies are available. The reproducible
-CI path is:
+Use `make check` when all native dependencies are available. The canonical CI
+path is:
 
 ```bash
 make container-check
 ```
+
+The base image, downloaded `yq` binaries, and package versions are pinned. APT
+still uses Debian's mutable package repositories, so old builds are constrained
+but are not guaranteed to remain bit-for-bit reproducible indefinitely.

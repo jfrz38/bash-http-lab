@@ -57,8 +57,26 @@ test_initialization_does_not_reseed_deleted_users() {
 	assert_equal 'false' "$USERS_REPOSITORY_FOUND"
 }
 
+test_json_backend_copies_the_immutable_seed() {
+	local body_file
+
+	export BASH_HTTP_USERS_BACKEND=json
+	export BASH_HTTP_USERS_FILE="$TEST_TMP_DIR/runtime/users.json"
+	mkdir "$TEST_TMP_DIR/runtime"
+	users_repository_load
+	users_repository_initialize
+	assert_equal '2' "$(jq 'length' "$BASH_HTTP_USERS_FILE")"
+
+	body_file="$TEST_TMP_DIR/json-user.json"
+	printf '%s' '{"name":"Katherine Johnson"}' >"$body_file"
+	users_repository_create "$body_file"
+	assert_equal '3' "$(jq 'length' "$BASH_HTTP_USERS_FILE")"
+	assert_equal '2' "$(jq 'length' "$ROOT_DIR/data/users.seed.json")"
+}
+
 run_test 'initializes SQLite with the example users' test_initializes_sqlite_with_example_users
 run_test 'preserves complete JSON documents in SQLite' test_preserves_json_document_during_lifecycle
 run_test 'rejects non-numeric identifiers before SQL execution' test_rejects_non_numeric_identifier
 run_test 'does not reseed deleted SQLite users' test_initialization_does_not_reseed_deleted_users
+run_test 'copies the immutable seed for JSON runtime data' test_json_backend_copies_the_immutable_seed
 finish_tests

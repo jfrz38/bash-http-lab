@@ -41,6 +41,7 @@ COPY --chown=sandbox:sandbox handlers/ handlers/
 COPY --chown=sandbox:sandbox lib/ lib/
 COPY --chown=sandbox:sandbox middleware/ middleware/
 COPY --chown=sandbox:sandbox openapi.yaml ./
+RUN install --directory --owner=sandbox --group=sandbox --mode=0755 /workspace/runtime
 
 USER sandbox
 

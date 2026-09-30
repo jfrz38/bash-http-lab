@@ -41,6 +41,11 @@ test_rejects_malformed_json() {
 	assert_status "$BODY_BAD_REQUEST" body_normalize
 }
 
+test_rejects_multiple_json_values() {
+	prepare_body 'application/json' '{"first":true} {"second":true}'
+	assert_status "$BODY_BAD_REQUEST" body_normalize
+}
+
 test_normalizes_yaml_to_json() {
 	local normalized
 	prepare_body 'application/yaml' 'name: Ada'
@@ -51,6 +56,15 @@ test_normalizes_yaml_to_json() {
 	normalized=$(<"$BODY_NORMALIZED_FILE")
 	assert_equal 'json' "$BODY_FORMAT"
 	assert_equal '{"name":"Ada"}' "$normalized"
+}
+
+test_rejects_multiple_yaml_documents() {
+	prepare_body 'application/yaml' $'first: true\n---\nsecond: true'
+	# shellcheck disable=SC2317 # Stub invoked indirectly by body_normalize.
+	yq() {
+		printf '%s\n%s\n' '{"first":true}' '{"second":true}'
+	}
+	assert_status "$BODY_BAD_REQUEST" body_normalize
 }
 
 test_preserves_plain_text_bytes() {
@@ -75,6 +89,20 @@ test_rejects_unsupported_media_type() {
 	assert_status "$BODY_UNSUPPORTED_MEDIA_TYPE" body_normalize
 }
 
+test_rejects_malformed_content_type_parameters() {
+	local content_type
+	for content_type in 'application/json;' 'application/json; charset' 'application/json; charset=' 'application/json; =utf-8' 'application/json; charset=utf-8;' 'application/json; charset=utf-8; charset=ascii'; do
+		prepare_body "$content_type" '{}'
+		assert_status "$BODY_BAD_REQUEST" body_normalize
+	done
+}
+
+test_accepts_multiple_content_type_parameters() {
+	prepare_body 'application/json; charset=utf-8; profile=compact' '{}'
+	body_normalize
+	assert_equal 'application/json' "$BODY_MEDIA_TYPE"
+}
+
 test_cleanup_removes_private_storage() {
 	local temp_dir
 	body_context_create
@@ -88,9 +116,13 @@ test_cleanup_removes_private_storage() {
 
 run_test 'validates and compacts JSON bodies' test_normalizes_json
 run_test 'rejects malformed JSON bodies' test_rejects_malformed_json
+run_test 'rejects multiple top-level JSON values' test_rejects_multiple_json_values
 run_test 'normalizes YAML bodies to JSON' test_normalizes_yaml_to_json
+run_test 'rejects multiple YAML documents' test_rejects_multiple_yaml_documents
 run_test 'preserves plain text body bytes' test_preserves_plain_text_bytes
 run_test 'requires Content-Type for a nonempty body' test_requires_content_type_for_nonempty_body
 run_test 'rejects unsupported media types' test_rejects_unsupported_media_type
+run_test 'rejects malformed Content-Type parameters' test_rejects_malformed_content_type_parameters
+run_test 'accepts complete Content-Type parameters' test_accepts_multiple_content_type_parameters
 run_test 'removes private body storage' test_cleanup_removes_private_storage
 finish_tests

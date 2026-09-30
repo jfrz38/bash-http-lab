@@ -34,6 +34,20 @@ users_json_write_all() {
 }
 
 users_repository_initialize() {
+	local data_dir temporary_file
+
+	users_json_path
+	[[ ! -e $USERS_JSON_FILE ]] || {
+		users_json_read_all
+		return
+	}
+	data_dir=${USERS_JSON_FILE%/*}
+	[[ $data_dir != "$USERS_JSON_FILE" && -d $data_dir && -w $data_dir ]] || return 1
+	temporary_file=$(mktemp "$data_dir/.users.XXXXXX") || return 1
+	if ! cp -- "$ROOT_DIR/data/users.seed.json" "$temporary_file" || ! chmod 0644 "$temporary_file" || ! mv "$temporary_file" "$USERS_JSON_FILE"; then
+		rm -f -- "$temporary_file"
+		return 1
+	fi
 	users_json_read_all
 }
 
