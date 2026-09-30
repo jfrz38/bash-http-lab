@@ -1,0 +1,46 @@
+openapi: 3.0.3
+info:
+  title: Router fixture
+  version: 1.0.0
+paths:
+  /items/{itemId}:
+    parameters:
+      - name: itemId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: get_item
+      responses:
+        '200':
+          description: Item
+    post:
+      operationId: create_item
+      responses:
+        '200':
+          description: Item
+  /items/special:
+    get:
+      operationId: get_special_item
+      x-middlewares: [requestId, logging]
+      responses:
+        '200':
+          description: Special item
+  /parents/{parentId}/items/{itemId}:
+    parameters:
+      - name: parentId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: itemId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: get_parent_item
+      responses:
+        '200':
+          description: Nested item

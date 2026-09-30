@@ -1,0 +1,12 @@
+openapi: 3.0.3
+info:
+  title: Duplicate middleware fixture
+  version: 1.0.0
+paths:
+  /health:
+    get:
+      operationId: health
+      x-middlewares: [requestId, requestId]
+      responses:
+        '200':
+          description: OK

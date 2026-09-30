@@ -1,0 +1,105 @@
+openapi: 3.0.3
+info:
+  title: Bash HTTP Lab Users API
+  version: 0.2.0
+paths:
+  /health:
+    get:
+      operationId: health
+      x-middlewares: [requestId, logging]
+      responses:
+        '200':
+          description: Runtime health
+          content:
+            application/json:
+              example:
+                status: ok
+            application/yaml: {}
+            text/yaml: {}
+  /users:
+    get:
+      operationId: list_users
+      x-middlewares: [requestId, logging]
+      responses:
+        '200':
+          description: All users
+          content:
+            application/json:
+              example:
+                - id: 1
+                  name: Ada Lovelace
+                - id: 2
+                  name: Grace Hopper
+            application/yaml: {}
+            text/yaml: {}
+    post:
+      operationId: create_user
+      x-middlewares: [requestId, logging]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+            example:
+              name: Katherine Johnson
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              example:
+                id: 3
+                name: Katherine Johnson
+            application/yaml: {}
+            text/yaml: {}
+  /users/{userId}:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    get:
+      operationId: get_user
+      x-middlewares: [requestId, logging]
+      responses:
+        '200':
+          description: One user
+          content:
+            application/json:
+              example:
+                id: 1
+                name: Ada Lovelace
+            application/yaml: {}
+            text/yaml: {}
+        '404':
+          description: User not found
+          content:
+            application/json:
+              example:
+                error: Not Found
+            application/yaml: {}
+            text/yaml: {}
+    delete:
+      operationId: delete_user
+      x-middlewares: [requestId, logging]
+      responses:
+        '200':
+          description: User deleted
+          content:
+            application/json:
+              example:
+                deleted: true
+                id: '1'
+            application/yaml: {}
+            text/yaml: {}
+        '404':
+          description: User not found
+          content:
+            application/json:
+              example:
+                error: Not Found
+            application/yaml: {}
+            text/yaml: {}

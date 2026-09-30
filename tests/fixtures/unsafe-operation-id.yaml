@@ -1,0 +1,11 @@
+openapi: 3.0.3
+info:
+  title: Unsafe operation ID
+  version: 1.0.0
+paths:
+  /books:
+    get:
+      operationId: ../../commands
+      responses:
+        '200':
+          description: Books

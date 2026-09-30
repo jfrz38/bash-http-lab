@@ -1,0 +1,11 @@
+openapi: 3.0.3
+info:
+  title: Unsupported response status 204 fixture
+  version: 1.0.0
+paths:
+  /health:
+    get:
+      operationId: health
+      responses:
+        '204':
+          description: No content

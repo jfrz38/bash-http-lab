@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+handle_request_context() {
+	local body
+	body=$(<"$BODY_NORMALIZED_FILE")
+	response_set_structured 200 \
+		"{\"path\":\"${REQUEST_PATH_PARAMS[itemId]}\",\"query\":\"${REQUEST_QUERY_PARAMS[q]}\",\"header\":\"${REQUEST_HEADER_PARAMS['x-trace']}\",\"requestId\":\"$REQUEST_ID\",\"body\":$body}"
+}

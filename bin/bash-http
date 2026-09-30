@@ -1,0 +1,209 @@
+#!/usr/bin/env bash
+
+set -uo pipefail
+
+ROOT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+
+# shellcheck source=../lib/dependencies.sh
+source "$ROOT_DIR/lib/dependencies.sh"
+# shellcheck source=../lib/request.sh
+source "$ROOT_DIR/lib/request.sh"
+# shellcheck source=../lib/params.sh
+source "$ROOT_DIR/lib/params.sh"
+# shellcheck source=../lib/body.sh
+source "$ROOT_DIR/lib/body.sh"
+# shellcheck source=../lib/response.sh
+source "$ROOT_DIR/lib/response.sh"
+# shellcheck source=../lib/errors.sh
+source "$ROOT_DIR/lib/errors.sh"
+# shellcheck source=../lib/openapi.sh
+source "$ROOT_DIR/lib/openapi.sh"
+# shellcheck source=../lib/validation.sh
+source "$ROOT_DIR/lib/validation.sh"
+# shellcheck source=../middleware/request-id.sh
+source "$ROOT_DIR/middleware/request-id.sh"
+# shellcheck source=../middleware/logging.sh
+source "$ROOT_DIR/middleware/logging.sh"
+# shellcheck source=../lib/middleware.sh
+source "$ROOT_DIR/lib/middleware.sh"
+# shellcheck source=../lib/router.sh
+source "$ROOT_DIR/lib/router.sh"
+# shellcheck source=../lib/server.sh
+source "$ROOT_DIR/lib/server.sh"
+# shellcheck source=../lib/generator.sh
+source "$ROOT_DIR/lib/generator.sh"
+# shellcheck source=../handlers/users-repository.sh
+source "$ROOT_DIR/handlers/users-repository.sh"
+
+print_help() {
+	cat <<'EOF'
+Usage:
+  bash-http help
+  bash-http serve OPENAPI_FILE [--host HOST] [--port PORT]
+  bash-http mock OPENAPI_FILE [--host HOST] [--port PORT]
+  bash-http routes OPENAPI_FILE
+  bash-http validate OPENAPI_FILE
+  bash-http generate OPENAPI_FILE
+
+Commands:
+  help      Show this help.
+  serve     Start the HTTP server.
+  mock      Start the HTTP server using documented response examples.
+  routes    List operations discovered from OpenAPI.
+  validate  Validate the supported OpenAPI routing subset.
+  generate  Create handler files whose destinations do not exist.
+
+Serve defaults:
+  host: 127.0.0.1
+  port: 8080
+EOF
+}
+
+users_repository_is_required() {
+	local operation_id
+
+	for operation_id in "${OPENAPI_ROUTE_OPERATION_IDS[@]}"; do
+		case $operation_id in
+		list_users | create_user | get_user | delete_user) return 0 ;;
+		esac
+	done
+	return 1
+}
+
+server_command() {
+	local command=$1
+	shift
+	local host='127.0.0.1'
+	local port='8080'
+	local openapi_file
+
+	if (($# == 0)) || [[ $1 == --* ]]; then
+		printf 'The %s command requires an OpenAPI file.\n' "$command" >&2
+		return 2
+	fi
+	openapi_file=$1
+	shift
+
+	while (($# > 0)); do
+		case $1 in
+		--host | --port)
+			if (($# < 2)); then
+				printf 'Missing value for %s.\n' "$1" >&2
+				return 2
+			fi
+			if [[ $1 == '--host' ]]; then
+				host=$2
+			else
+				port=$2
+			fi
+			shift 2
+			;;
+		*)
+			printf 'Unknown %s option: %s.\n' "$command" "$1" >&2
+			return 2
+			;;
+		esac
+	done
+
+	validate_host "$host" || return 2
+	validate_port "$port" || return 2
+	require_yq_v4 || return 1
+	if ! openapi_load_routes "$openapi_file"; then
+		printf '%s\n' "$OPENAPI_ERROR" >&2
+		return 1
+	fi
+	require_command jq || return 1
+	require_command socat || return 1
+	if [[ $command == 'serve' ]] && users_repository_is_required; then
+		users_repository_load || return 1
+		if [[ ${BASH_HTTP_USERS_BACKEND:-json} == 'sqlite' ]]; then
+			require_command sqlite3 || return 1
+		fi
+		if ! users_repository_initialize; then
+			printf 'Unable to initialize the %s users backend.\n' "${BASH_HTTP_USERS_BACKEND:-json}" >&2
+			return 1
+		fi
+	fi
+	start_server "$host" "$port" "$ROOT_DIR/bin/bash-http" "$openapi_file" "$command"
+}
+
+generate_command() {
+	local openapi_file=${1:-}
+
+	if (($# != 1)); then
+		printf 'The generate command requires exactly one OpenAPI file.\n' >&2
+		return 2
+	fi
+	require_yq_v4 || return 1
+	if ! openapi_load_routes "$openapi_file"; then
+		printf '%s\n' "$OPENAPI_ERROR" >&2
+		return 1
+	fi
+	generate_handlers "$ROOT_DIR/handlers"
+}
+
+openapi_command() {
+	local command=$1
+	local openapi_file=${2:-}
+
+	if (($# != 2)); then
+		printf 'The %s command requires exactly one OpenAPI file.\n' "$command" >&2
+		return 2
+	fi
+	require_yq_v4 || return 1
+	if ! openapi_load_routes "$openapi_file"; then
+		printf '%s\n' "$OPENAPI_ERROR" >&2
+		return 1
+	fi
+	if [[ $command == 'routes' ]]; then
+		openapi_print_routes
+	else
+		printf 'OpenAPI document matches the supported subset.\n'
+	fi
+}
+
+main() {
+	local command=${1:-help}
+	if (($# > 0)); then
+		shift
+	fi
+
+	check_bash_version || return 1
+	case $command in
+	help | --help | -h)
+		if (($# > 0)); then
+			printf 'The help command does not accept arguments.\n' >&2
+			return 2
+		fi
+		print_help
+		;;
+	serve | mock) server_command "$command" "$@" ;;
+	routes | validate) openapi_command "$command" "$@" ;;
+	generate) generate_command "$@" ;;
+	__handle-connection)
+		if (($# != 2)) || [[ $2 != 'serve' && $2 != 'mock' ]]; then
+			printf 'The private connection operation requires an OpenAPI file and server mode.\n' >&2
+			return 2
+		fi
+		require_yq_v4 || return 1
+		require_command jq || return 1
+		if [[ $2 == 'serve' ]]; then
+			if openapi_load_routes "$1" && users_repository_is_required; then
+				users_repository_load || return 1
+				if [[ ${BASH_HTTP_USERS_BACKEND:-json} == 'sqlite' ]]; then
+					require_command sqlite3 || return 1
+				fi
+			fi
+		fi
+		trap body_cleanup EXIT INT TERM
+		handle_connection "$1" "$ROOT_DIR/handlers" "$2"
+		;;
+	*)
+		printf 'Unknown command: %s.\n' "$command" >&2
+		print_help >&2
+		return 2
+		;;
+	esac
+}
+
+main "$@"

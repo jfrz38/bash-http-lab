@@ -1,0 +1,16 @@
+openapi: 3.0.3
+info:
+  title: Invalid text schema fixture
+  version: 1.0.0
+paths:
+  /health:
+    post:
+      operationId: health
+      requestBody:
+        content:
+          text/plain:
+            schema:
+              type: integer
+      responses:
+        '200':
+          description: Healthy
